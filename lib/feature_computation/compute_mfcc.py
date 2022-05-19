@@ -26,6 +26,15 @@ class MFCC:
         self.n_mels = int(config['n_mels'])
         self.n_mfcc = int(config['n_mfcc'])
         self.delta_win = int(config['delta_win'])
+        self.excl_c0 =config['excl_c0']
+    
+    def ener_mfcc(self, Xin_split, mfcc):
+        astf=abs(librosa.stft(y=Xin_split,n_fft=2048, win_length=self.frame_length, hop_length=self.hop_length, window='hann', center=False))
+        sastf=np.square(astf)# squared absolute short term frequency
+        enerf=np.sum(sastf,axis=0) # short term energy 
+        enerfB=enerf>(0.06*np.mean(enerf)) # voiced frame selection with 6% average eneregy
+        mfcc=mfcc[:,enerfB]# selected MFCC frames with energy threshold
+        return mfcc
 
     def compute(self, base_path, meta_info, split_dir, feat_dir, delta=False):
         for sl_no in meta_info.keys():
@@ -60,12 +69,19 @@ class MFCC:
                         continue
                     
                     Xin_split = Xin[first_sample:last_sample]
-                    mfcc = librosa.feature.mfcc(y=Xin_split, sr=fs, n_mfcc=self.n_mfcc, dct_type=2, norm='ortho', lifter=0, win_length=self.frame_length, hop_length=self.hop_length, window='hann', center=False, n_mels=self.n_mels)
+                    
+                    if self.excl_c0: # exclude c0 from mfcc computation
+                        mfcc = librosa.feature.mfcc(y=Xin_split, sr=fs, n_mfcc=self.n_mfcc+1, dct_type=2, norm='ortho', lifter=0, win_length=self.frame_length, hop_length=self.hop_length, window='hann', center=False, n_mels=self.n_mels)
+                        mfcc= mfcc[1:,:] # excluding c0
+                    else:
+                        mfcc = librosa.feature.mfcc(y=Xin_split, sr=fs, n_mfcc=self.n_mfcc, dct_type=2, norm='ortho', lifter=0, win_length=self.frame_length, hop_length=self.hop_length, window='hann', center=False, n_mels=self.n_mels)
+                        
                     if delta:
                         delta_mfcc = librosa.feature.delta(mfcc, width=self.delta_win, order=1, axis=-1)
                         delta_delta_mfcc = librosa.feature.delta(mfcc, width=self.delta_win, order=2, axis=-1)
                         mfcc = np.append(mfcc, delta_mfcc, axis=0)
                         mfcc = np.append(mfcc, delta_delta_mfcc, axis=0)
+                    mfcc=self.ener_mfcc(Xin_split, mfcc)
                     np.save(opFile, mfcc)
                     print(f'{sl_no}/{len(meta_info.keys())} {fName} {split_id} mfcc={np.shape(mfcc)} duration={duration}')
                     
