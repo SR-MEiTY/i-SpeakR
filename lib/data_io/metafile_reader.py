@@ -53,14 +53,14 @@ class ReadMetaFile:
         self.total_duration = {'hours':hours, 'minutes':minutes, 'seconds':seconds}
         
     def get_gender_dist(self):
+        m_spk=[] # keep track of male speaker id
+        f_spk=[] #keep track of female speaker id
         if len(self.info)==0:
             self.read_info()
-        male = 0
-        female = 0
         for sl_no in self.info.keys():
             if self.info[sl_no]['Gender']=='M':
-                male += 1
+                m_spk.append(self.info[sl_no]['Speaker_ID'])
             if self.info[sl_no]['Gender']=='F':
-                female += 1
-        self.gender_distribution['Male'] = male
-        self.gender_distribution['Female'] = female
+                f_spk.append(self.info[sl_no]['Speaker_ID'])
+        self.gender_distribution['Male'] = len(np.unique(m_spk))
+        self.gender_distribution['Female'] = len(np.unique(f_spk))

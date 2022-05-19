@@ -29,6 +29,7 @@ def get_configurations():
         'n_mels': int(section['n_mels']),
         'n_mfcc': int(section['n_mfcc']),
         'delta_win': int(section['delta_win']),
+        'excl_c0': section.getboolean('excl_c0')
         }
     
     return CFG
