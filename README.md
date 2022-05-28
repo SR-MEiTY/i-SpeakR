@@ -1,4 +1,4 @@
-<pre>
+[pre]
 # i-SpeakR
 Speaker recognition toolkit for Indian languages
 ------------------------------------------------
@@ -18,7 +18,7 @@ Coding conventions followed:
                       Should NOT end with an underscore "_"
     
     Function names:   Should have all lower-case alphabets [a-z]
-                      Should follow snake case. <this_is_a_snake_case>
+                      Should follow snake case. [this_is_a_snake_case]
                       Should not include numerals [0-9]
                       Can include underscore "_"
     
@@ -40,13 +40,13 @@ Structures for various IDs:
 ---------------------------
 
     Feature filename structure:
-        <Feature folder>/<Split-ID>.npy
+        [Feature folder]/[Split-ID].npy
             
     Split-ID structure:
-        <Utterance-ID>_<Chop Size>_<Split count formatted as a 3-digit number>
+        [Utterance-ID]_[Chop Size]_[Split count formatted as a 3-digit number]
 
     Utterance-ID structure:
-        <DEV/ENR/TEST>_<Speaker-ID>_<File Name>
+        [DEV/ENR/TEST]_[Speaker-ID]_[File Name]
 
 
 
@@ -58,27 +58,27 @@ There are two options to provide data.
     expected to be stored in a specific format, as shown below:
         root/...
                |--DEV/-.
-               |       |..<SpeakerID-1>/-.
+               |       |..[SpeakerID-1]/-.
                |       |                 |--{wav files}
-                       |--<..>
+                       |--[..]
                |       |                  
-               |       |..<SpeakerID-N>/-.
+               |       |..[SpeakerID-N]/-.
                |                         |--{wav files}
                |        
                |--ENR/-.        
-               |       |..<SpeakerID-1>/-.
+               |       |..[SpeakerID-1]/-.
                |       |                 |--{wav files}
-                       |--<..>
+                       |--[..]
                |       |                   
-               |       |..<SpeakerID-N>/-.
+               |       |..[SpeakerID-N]/-.
                |                         |..{wav files}
                |
                |--TEST/-.        
-                        |--<SpeakerID-1>/-.
+                        |--[SpeakerID-1]/-.
                         |                 |--{wav files}
-                        |--<..>
+                        |--[..]
                         |                   
-                        |--<SpeakerID-N>/-.
+                        |--[SpeakerID-N]/-.
                                           |--{wav files}
                         
     2. Advanced: This option for advanced users. User needs to provide path 
@@ -96,4 +96,4 @@ There are two options to provide data.
         5. sensor: Sensor used to record each utterance (optional)
         6. language: Language used for each utterance (optional)
 
-</pre>
+[/pre]
