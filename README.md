@@ -1,3 +1,4 @@
+<pre>
 # i-SpeakR
 Speaker recognition toolkit for Indian languages
 ------------------------------------------------
@@ -95,13 +96,4 @@ There are two options to provide data.
         5. sensor: Sensor used to record each utterance (optional)
         6. language: Language used for each utterance (optional)
 
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
+</pre>
