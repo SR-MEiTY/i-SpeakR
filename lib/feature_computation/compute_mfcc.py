@@ -12,78 +12,137 @@ import numpy as np
 from lib.preprocessing.normalize import Normalize
 
 class MFCC:
-    sampling_rate = 0
-    frame_length = 0
-    hop_length = 0
-    n_mels = 0
-    n_mfcc = 0
-    delta_win = 0
+    SAMPLING_RATE = 0
+    FRAME_LENGTH = 0
+    HOP_LENGTH = 0
+    N_MELS = 0
+    N_MFCC = 0
+    DELTA_WIN = 0
     
     def __init__(self, config):
-        self.sampling_rate = int(config['sampling_rate'])
-        self.frame_length = int(config['frame_size']*self.sampling_rate/1000)
-        self.hop_length = int(config['frame_shift']*self.sampling_rate/1000)
-        self.n_mels = int(config['n_mels'])
-        self.n_mfcc = int(config['n_mfcc'])
-        self.delta_win = int(config['delta_win'])
-        self.excl_c0 =config['excl_c0']
+        self.SAMPLING_RATE = int(config['SAMPLING_RATE'])
+        self.FRAME_LENGTH = int(config['FRAME_SIZE']*self.SAMPLING_RATE/1000)
+        self.HOP_LENGTH = int(config['FRAME_SHIFT']*self.SAMPLING_RATE/1000)
+        self.N_MELS = int(config['N_MELS'])
+        self.N_MFCC = int(config['N_MFCC'])
+        self.DELTA_WIN = int(config['DELTA_WIN'])
+        self.EXCL_C0 =config['EXCL_C0']
+    
     
     def ener_mfcc(self, Xin_split, mfcc):
-        astf=abs(librosa.stft(y=Xin_split,n_fft=2048, win_length=self.frame_length, hop_length=self.hop_length, window='hann', center=False))
-        sastf=np.square(astf)# squared absolute short term frequency
-        enerf=np.sum(sastf,axis=0) # short term energy 
-        enerfB=enerf>(0.06*np.mean(enerf)) # voiced frame selection with 6% average eneregy
-        mfcc=mfcc[:,enerfB]# selected MFCC frames with energy threshold
-        return mfcc
+        '''
+        Selection of MFCC feature vectors based on VAD threshold of 60% of
+        average energy
+
+        Parameters
+        ----------
+        Xin_split : 1D array
+            Audio samples for sub-utterance.
+        mfcc : 2D array
+            MFCC feature vectors for the sub-utterance.
+
+        Returns
+        -------
+        mfcc : 2D array
+            Voiced frame MFCC feature vectors selected based on energy 
+            threshold.
+
+        '''
+        astf_ = np.abs(librosa.stft(y=Xin_split, n_fft=2048, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False))
+        # squared absolute short term frequency
+        sastf_ = np.square(astf_)
+        # short term energy 
+        enerf_ = np.sum(sastf_,axis=0)
+        # voiced frame selection with 6% average eneregy
+        enerfB_ = enerf_>(0.06*np.mean(enerf_))
+        # selected MFCC frames with energy threshold
+        mfcc_ = mfcc[:,enerfB_]
+        return mfcc_
+
 
     def compute(self, base_path, meta_info, split_dir, feat_dir, delta=False):
-        for sl_no in meta_info.keys():
-            fName = meta_info[sl_no]['Local_Path'].split('/')[-1] # meta_info[sl_no]['File Name']
-            data_path = base_path + '/' + meta_info[sl_no]['Local_Path']
-            if not os.path.exists(data_path):
-                print('WAV file does not exist ', data_path)
-                continue
+        '''
+        Computing the MFCC features
 
-            opDir_path = feat_dir + '/'
-            if not os.path.exists(opDir_path):
-                os.makedirs(opDir_path)
+        Feature filename structure:
+            <Feature folder>/<Split-ID>.npy
             
-            chop_details_fName = split_dir + '/' + '/'.join(meta_info[sl_no]['Local_Path'].split('/')[:-1]) + '/' + fName.split('.')[0] + '.csv'
-            if not os.path.exists(chop_details_fName):
-                print(f'{chop_details_fName} Utterance chop details unavailable')
-                continue
+        Split-ID structure:
+            <Utterance-ID>_<Chop Size>_<Split count formatted as a 3-digit number>
 
-            Xin, fs = librosa.load(data_path, mono=True, sr=self.sampling_rate)
-            Xin = Normalize().mean_max_normalize(Xin)
-            with open(chop_details_fName, 'r', encoding='utf8') as fid:
-                reader = csv.DictReader(fid)
-                for row in reader:
-                    split_id = row['split_id']
-                    first_sample = int(row['first_sample'])
-                    last_sample = int(row['last_sample'])
-                    duration = float(row['duration'])
-            
-                    opFile = opDir_path + '/' + split_id + '.npy'
-                    if os.path.exists(opFile):
-                        print(f'{sl_no}/{len(meta_info.keys())} {fName} {split_id} feature already computed')
-                        continue
-                    
-                    Xin_split = Xin[first_sample:last_sample]
-                    
-                    if self.excl_c0: # exclude c0 from mfcc computation
-                        mfcc = librosa.feature.mfcc(y=Xin_split, sr=fs, n_mfcc=self.n_mfcc+1, dct_type=2, norm='ortho', lifter=0, win_length=self.frame_length, hop_length=self.hop_length, window='hann', center=False, n_mels=self.n_mels)
-                        mfcc= mfcc[1:,:] # excluding c0
-                    else:
-                        mfcc = librosa.feature.mfcc(y=Xin_split, sr=fs, n_mfcc=self.n_mfcc, dct_type=2, norm='ortho', lifter=0, win_length=self.frame_length, hop_length=self.hop_length, window='hann', center=False, n_mels=self.n_mels)
+        Utterance-ID structure:
+            <DEV/ENR/TEST>_<Speaker-ID>_<File Name>
+
+        Parameters
+        ----------
+        base_path : str
+            Path to dataset root.
+        meta_info : dict
+            Dataset information.
+        split_dir : str
+            Path to details of utterance chopping.
+        feat_dir : str
+            Path to store the feature vectors.
+        delta : bool, optional
+            Flag to indicate whether delta features are to be computed. 
+            The default is False.
+
+        Returns
+        -------
+        None.
+
+        '''
+        for data_type_ in meta_info.keys():
+            for utterance_id_ in meta_info[data_type_].keys():
+                fName_ = meta_info[data_type_][utterance_id_]['wav_path'].split('/')[-1]
+                data_path_ = base_path + '/' + meta_info[data_type_][utterance_id_]['wav_path']
+                if not os.path.exists(data_path_):
+                    print('WAV file does not exist ', data_path_)
+                    continue
+    
+                opDir_path_ = feat_dir + '/'
+                if not os.path.exists(opDir_path_):
+                    os.makedirs(opDir_path_)
+                
+                chop_details_fName_ = split_dir + '/' + '/'.join(meta_info[data_type_][utterance_id_]['wav_path'].split('/')[:-1]) + '/' + fName_.split('.')[0] + '.csv'
+                if not os.path.exists(chop_details_fName_):
+                    print(f'{chop_details_fName_} Utterance chop details unavailable')
+                    continue
+    
+                Xin_, fs_ = librosa.load(data_path_, mono=True, sr=self.SAMPLING_RATE)
+                Xin_ = Normalize().mean_max_normalize(Xin_)
+                with open(chop_details_fName_, 'r', encoding='utf8') as fid_:
+                    reader_ = csv.DictReader(fid_)
+                    for row_ in reader_:
+                        split_id_ = row_['split_id']
+                        first_sample_ = int(row_['first_sample'])
+                        last_sample_ = int(row_['last_sample'])
+                        duration_ = float(row_['duration'])
+                
+                        opFile_ = opDir_path_ + '/' + split_id_ + '.npy'
+                        if os.path.exists(opFile_):
+                            print(f'{data_type_} {utterance_id_}/{len(meta_info[data_type_].keys())} {fName_} {split_id_} feature already computed')
+                            continue
                         
-                    if delta:
-                        delta_mfcc = librosa.feature.delta(mfcc, width=self.delta_win, order=1, axis=-1)
-                        delta_delta_mfcc = librosa.feature.delta(mfcc, width=self.delta_win, order=2, axis=-1)
-                        mfcc = np.append(mfcc, delta_mfcc, axis=0)
-                        mfcc = np.append(mfcc, delta_delta_mfcc, axis=0)
-                    mfcc=self.ener_mfcc(Xin_split, mfcc)
-                    np.save(opFile, mfcc)
-                    print(f'{sl_no}/{len(meta_info.keys())} {fName} {split_id} mfcc={np.shape(mfcc)} duration={duration}')
-                    
+                        Xin_split_ = Xin_[first_sample_:last_sample_]
+                        
+                        # Exclude c0 from mfcc computation
+                        if self.EXCL_C0:
+                            mfcc_ = librosa.feature.mfcc(y=Xin_split_, sr=fs_, n_mfcc=self.N_MFCC+1, dct_type=2, norm='ortho', lifter=0, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False, n_mels=self.N_MELS)
+                            mfcc_ = mfcc_[1:,:] # excluding c0
+                        else:
+                            mfcc_ = librosa.feature.mfcc(y=Xin_split_, sr=fs_, n_mfcc=self.N_MFCC, dct_type=2, norm='ortho', lifter=0, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False, n_mels=self.N_MELS)
+                            
+                        if delta:
+                            delta_mfcc_ = librosa.feature.delta(mfcc_, width=self.DELTA_WIN, order=1, axis=-1)
+                            delta_delta_mfcc_ = librosa.feature.delta(mfcc_, width=self.DELTA_WIN, order=2, axis=-1)
+                            mfcc_ = np.append(mfcc_, delta_mfcc_, axis=0)
+                            mfcc_ = np.append(mfcc_, delta_delta_mfcc_, axis=0)
+                        
+                        # Selection of voiced frames
+                        voiced_mfcc_ = self.ener_mfcc(Xin_split_, mfcc_)
+                        np.save(opFile_, voiced_mfcc_)
+                        print(f'{data_type_} {utterance_id_}/{len(meta_info[data_type_].keys())} {fName_} {split_id_} mfcc={np.shape(voiced_mfcc_)} duration={duration_}')
+                        
         return
     

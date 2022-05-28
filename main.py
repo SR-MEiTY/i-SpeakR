@@ -8,36 +8,6 @@ Created on Wed May 11 10:47:48 2022
 @collaborators: 
     Jagabandhu Mishra, Ph.D. Scholar, Dept. of EE, IIT Dharwad
 
-Naming conventions followed:
-    Local variable:   Should have all lower-case alphabets [a-z]
-                      Should start with an alphabet
-                      Can include numerals [0-9]
-                      Can include special characters [@, _, $]
-                      Should end with an underscore "_"
-    
-    Global variables: Should have all upper-case alphabets [A-Z]
-                      Should start with an alphabet
-                      Can include numerals [0-9]
-                      Can include special characters [@, _, $]
-                      Should NOT end with an underscore "_"
-    
-    Function names:   Should have all lower-case alphabets [a-z]
-                      Should follow snake case. <this_is_a_snake_case>
-                      Should not include numerals [0-9]
-                      Can include underscore "_"
-    
-    Class names:      Can have a combination of lower-case [a-z] and upper-case 
-                      alphabets [A-Z]
-                      Should follow Pascal case - ThisIsPascalCase
-                      Words must start with an upper-case alphabet
-                      Consecutive words must be concatenated
-                      Should not include numerals [0-9] or special characters
-                      
-    Commenting:       All functions must include Doc Strings
-                      All significant line of code must have an inline comment
-                      All variable declarations must be commented
-                    
-                    
 """
 
 import argparse
@@ -47,6 +17,8 @@ from lib.feature_computation.compute_mfcc import MFCC
 import configparser
 import json
 import sys
+import datetime
+import os
 
 
 def select_data_sets(info):
@@ -108,7 +80,7 @@ def select_data_sets(info):
             sys.exit(0)
     
     # Select set names starting with "TEST"
-    test_sets = [set_name if set_name.startswith('TEST') else '' for set_name in metaobj.info.keys()]
+    test_sets = [set_name if set_name.startswith('TEST') else '' for set_name in info.keys()]
     # Remove empty set names
     test_sets = list(filter(None, test_sets))
     # Convert the list of names to a dict 
@@ -130,7 +102,7 @@ def select_data_sets(info):
     return info
 
 
-def get_configurations():
+def get_configurations(args):
     '''
     This function reads the config.ini file that lists the fixed variables to
     be used.
@@ -146,18 +118,33 @@ def get_configurations():
     config.read('config.ini')
     section = config['MAIN']
     CFG = {
+        'today': datetime.datetime.now().strftime("%Y-%m-%d"),
         'SAMPLING_RATE': int(section['sampling_rate']),             # Sampling rate to be used for the audio files
         'FRAME_SIZE': int(section['frame_size']),                   # Short-term frame size in miliseconds
         'FRAME_SHIFT': int(section['frame_shift']),                 # Short-term frame shift in miliseconds 
         'DEV_CHOP': [json.loads(config.get('MAIN', 'DEV_chop'))],   # Development sub-utterance sizes
-        'EN_CHOP': [json.loads(config.get('MAIN', 'EN_chop'))],     # Enrollment sub-utterance sizes
+        'ENR_CHOP': [json.loads(config.get('MAIN', 'ENR_chop'))],     # Enrollment sub-utterance sizes
         'TEST_CHOP': json.loads(config.get('MAIN', 'TEST_chop')),   # Test sub-utterance sizes
         'PREEMPHASIS': section.getboolean('preemphasis'),           # Boolean flag indicating pre-emphasis required or not. True indicates pre-emphasis is required, False indicates pre-emphasis not required.
         'N_MELS': int(section['n_mels']),                           # Number of Mel filters to be used
         'N_MFCC': int(section['n_mfcc']),                           # Number of MFCC coefficients to be computed. If EXCL_C0=True, N_MFCC+1 coefficients are computed and c0 is ignored
         'DELTA_WIN': int(section['delta_win']),                     # Context window to be used for computing Delta features
-        'EXCL_C0': section.getboolean('excl_c0')                    # Boolean flag indicating whether MFCC c0 to be used or not. True indicates c0 is included. False indicates c0 is to be ignored and N_MFCC+1 coefficients to be computed
+        'EXCL_C0': section.getboolean('excl_c0'),                   # Boolean flag indicating whether MFCC c0 to be used or not. True indicates c0 is included. False indicates c0 is to be ignored and N_MFCC+1 coefficients to be computed
+        'feature_name': section['feature_name'],
         }
+
+    CFG['opDir'] = args.output_path + '/i-SpeakR_output/' + args.data_path.split('/')[-2] + '_' + CFG['today'] + '/'
+    if not os.path.exists(CFG['opDir']):
+        os.makedirs(CFG['opDir'])
+        
+    CFG['SPLITS_DIR'] = CFG['opDir'] + '/sub_utterance_info/'
+    if not os.path.exists(CFG['SPLITS_DIR']):
+        os.makedirs(CFG['SPLITS_DIR'])
+
+    CFG['featDir'] = CFG['opDir'] + '/' + '/features/' + CFG['feature_name'] + '/'
+    if not os.path.exists(CFG['opDir']):
+        os.makedirs(CFG['opDir'])
+
     
     return CFG
     
@@ -178,10 +165,10 @@ def __init__():
         prog='i-SpeakR',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description='SPEECH TECHNOLOGIES IN INDIAN LANGUAGES\n-----------------------------------------\nDeveloping Speaker Recognition systems for Indian scenarios',
-        epilog='The above systax needs to be strictly followed.',
+        epilog='The above syntax needs to be strictly followed.',
         )
     # Adding the version information of the i-SpeakR toolkit
-    parser.add_argument('--version', '-v', action='version', version='%(prog)s 0.1.1')
+    parser.add_argument('-v', '--version', action='version', version='%(prog)s 0.1.1')
     # Adding a switch for the path to a csv file containing the meta information of the dataset
     # Adding switch to indicate the type of data
     parser.add_argument(
@@ -189,29 +176,25 @@ def __init__():
         type=str,
         choices=['infer', 'specify'],
         default='infer',
-        help='Switch to select how to obtain the dataset details'
+        help='Switch to select how to obtain the dataset details',
+        required=True,
         )
     parser.add_argument(
-        '--meta_path',
+        '--data_path',
         type=str,
-        help='Path to the meta file. Ignored if data_info="infer". Searches for DEV*.csv, ENR*.csv and TEST*.csv in <meta_path> when <data_info="specify">'
-        )
-    # Adding a switch to the base path of the dataset
-    parser.add_argument(
-        '--base_path',
-        type=str,
-        help='Base path to the data. If <data_info="infer">, expects three folders in <base_path>, viz. DEV, ENR, TEST. All wav files for DEV, ENR or TEST sets needs to be kept within each respective directories without any sub-directories.'
+        help='Path to the meta file. If <data_info="infer">, expects three folders in <data_path>, viz. DEV, ENR, TEST. All wav files for DEV, ENR or TEST sets needs to be kept within each respective directories without any sub-directories. If <data_info="specify">, searches for DEV*.csv, ENR*.csv and TEST*.csv in <meta_path>',
+        required=True,
         )
     # Adding a switch for the output path to be used by the system
     parser.add_argument(
         '--output_path',
         type=str,
-        help='Path to store the ouputs'
+        help='Path to store the ouputs',
+        default='../',
         )
     args = parser.parse_args()
 
-    print(f'meta_path: {args.meta_path}')
-    print(f'base_path: {args.base_path}')
+    print(f'meta_path: {args.data_path}')
     print(f'output_path: {args.output_path}')
     
     return args
@@ -219,37 +202,31 @@ def __init__():
 
 if __name__ == '__main__':
     args = __init__()
-    CFG = get_configurations()
-    print('Global variables:')
-    for key in CFG:
-        print(f'\t{key}={CFG[key]}')
-    print('\n')
     
-    metaobj = GetMetaInfo(data_info=args.data_info, path=args.meta_path, duration=True, gender=True)
+    metaobj = GetMetaInfo(data_info=args.data_info, path=args.data_path, duration=True, gender=True)
     print('\nData sets:')
-    for f in metaobj.info.keys():
+    for f in metaobj.INFO.keys():
         print(f"\t{f}", end=' ', flush=True)
-        print(f"Duration={metaobj.total_duration[f]}", end=' ', flush=True)
+        print(f"Duration={metaobj.TOTAL_DURATION[f]}", end=' ', flush=True)
         try:
-            print(f"{metaobj.gender_distribution[f]}")
+            print(f"{metaobj.GENDER_DISTRIBUTION[f]}")
         except:
             print('')
     print('\n')
         
-    metaobj.info = select_data_sets(metaobj.info)
-    print(f'\nSelected sets: {metaobj.info.keys()}\n')
+    metaobj.INFO = select_data_sets(metaobj.INFO)
+    print(f'\nSelected sets: {metaobj.INFO.keys()}\n')
+    # print('DEV utterance ID: ', metaobj.INFO['DEV'].keys())
+    # print('ENR utterance ID: ', metaobj.INFO['ENR'].keys())
+    # print('TEST utterance ID: ', metaobj.INFO['TEST'].keys())
 
-    sys.exit(0)
-    
-    if args.data_type=='DEV':
-        segment_duration = CFG['DEV_chop'] # Duration of the segments extracted from utterances
-    elif args.data_type=='EN':
-        segment_duration = CFG['EN_chop'] # Duration of the segments extracted from utterances
-    else:
-        segment_duration = CFG['TEST_chop'] # Duration of the segments extracted from utterances
-    splitsDir = args.output_path + '/segment_info/' + args.data_type + '/'
-        
-    ChopUtterances(chop_size=segment_duration, config=CFG).create_splits(metaobj.info, args.base_path, splitsDir)
+    CFG = get_configurations(args)
+    print('Global variables:')
+    for key in CFG:
+        print(f'\t{key}={CFG[key]}')
+    print('\n')
 
-    feat_dir = args.output_path + '/features/MFCC/' + args.data_type + '/'
-    MFCC(config=CFG).compute(args.base_path, metaobj.info, splitsDir, feat_dir, delta=True)
+    ChopUtterances(config=CFG).create_splits(metaobj.INFO, args.data_path)
+
+    if CFG['feature_name']=='MFCC':
+        MFCC(config=CFG).compute(args.data_path, metaobj.INFO, CFG['SPLITS_DIR'], CFG['featDir'], delta=True)
