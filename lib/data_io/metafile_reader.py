@@ -125,8 +125,8 @@ class GetMetaInfo:
             print('ENR folder does not exist')
             return
         self.INFO['ENR'] = {}
-        for speaker_id in next(os.walk(self.DATA_PATH+'/ENR/'))[1]:
-            for f_ in librosa.util.find_files(self.DATA_PATH+'/ENR/'+speaker_id+'/'):
+        for speaker_id_ in next(os.walk(self.DATA_PATH+'/ENR/'))[1]:
+            for f_ in librosa.util.find_files(self.DATA_PATH+'/ENR/'+speaker_id_+'/'):
                 f_splits_ = f_.split('/')
                 part_path_start = np.squeeze(np.where(np.array(f_splits_)=='ENR'))
                 f_part_ = '/'.join(f_splits_[part_path_start:])

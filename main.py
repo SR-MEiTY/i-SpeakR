@@ -14,11 +14,14 @@ import argparse
 from lib.data_io.metafile_reader import GetMetaInfo
 from lib.data_io.chop_utterances import ChopUtterances
 from lib.feature_computation.compute_mfcc import MFCC
+from lib.feature_computation.load_features import LoadFeatures
+from lib.models.GMM_UBM.gaussian_background import GaussianBackground
 import configparser
 import json
 import sys
 import datetime
 import os
+import numpy as np
 
 
 def select_data_sets(info):
@@ -54,7 +57,7 @@ def select_data_sets(info):
             dev_choice = int(dev_choice)
             for key in dev_sets.keys():
                 if not key==dev_choice:
-                    del metaobj.info[dev_sets[key]]
+                    del info[dev_sets[key]]
         except:
             print('Wrong choice')
             sys.exit(0)
@@ -130,7 +133,9 @@ def get_configurations(args):
         'N_MFCC': int(section['n_mfcc']),                           # Number of MFCC coefficients to be computed. If EXCL_C0=True, N_MFCC+1 coefficients are computed and c0 is ignored
         'DELTA_WIN': int(section['delta_win']),                     # Context window to be used for computing Delta features
         'EXCL_C0': section.getboolean('excl_c0'),                   # Boolean flag indicating whether MFCC c0 to be used or not. True indicates c0 is included. False indicates c0 is to be ignored and N_MFCC+1 coefficients to be computed
-        'feature_name': section['feature_name'],
+        'FEATURE_NAME': section['feature_name'],                    # Parameter to indicate which feature to compute
+        'MODEL_TYPE': section['model'],                             # Parameter indicating which model to use
+        'UBM_NCOMPONENTS': int(section['UBM_ncomp']),               # Number of Gaussian components for the UBM model
         }
 
     CFG['opDir'] = args.output_path + '/i-SpeakR_output/' + args.data_path.split('/')[-2] + '_' + CFG['today'] + '/'
@@ -141,10 +146,13 @@ def get_configurations(args):
     if not os.path.exists(CFG['SPLITS_DIR']):
         os.makedirs(CFG['SPLITS_DIR'])
 
-    CFG['featDir'] = CFG['opDir'] + '/' + '/features/' + CFG['feature_name'] + '/'
-    if not os.path.exists(CFG['opDir']):
-        os.makedirs(CFG['opDir'])
+    CFG['FEAT_DIR'] = CFG['opDir'] + '/features/' + CFG['FEATURE_NAME'] + '/'
+    if not os.path.exists(CFG['FEAT_DIR']):
+        os.makedirs(CFG['FEAT_DIR'])
 
+    CFG['MODEL_DIR'] = CFG['opDir'] + '/models/' + CFG['FEATURE_NAME'] + '_' + CFG['MODEL_TYPE'] + '/'
+    if not os.path.exists(CFG['MODEL_DIR']):
+        os.makedirs(CFG['MODEL_DIR'])
     
     return CFG
     
@@ -228,5 +236,23 @@ if __name__ == '__main__':
 
     ChopUtterances(config=CFG).create_splits(metaobj.INFO, args.data_path)
 
-    if CFG['feature_name']=='MFCC':
-        MFCC(config=CFG).compute(args.data_path, metaobj.INFO, CFG['SPLITS_DIR'], CFG['featDir'], delta=True)
+    if CFG['FEATURE_NAME']=='MFCC':
+        feat_info_ = MFCC(config=CFG).compute(args.data_path, metaobj.INFO, CFG['SPLITS_DIR'], CFG['FEAT_DIR'], delta=True)
+            
+    if CFG['MODEL_TYPE']=='GMM_UBM':
+        dev_key = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
+        FV_dev = LoadFeatures(info=feat_info_[dev_key], feature_name=CFG['FEATURE_NAME']).load()
+        GB = GaussianBackground(model_dir=CFG['MODEL_DIR'], num_mixtures=CFG['UBM_NCOMPONENTS'])
+        GB.train_ubm(FV_dev)
+        
+        ''' Speaker-wise adaptation '''
+        enr_key = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
+        FV_enr = LoadFeatures(info=feat_info_[enr_key], feature_name=CFG['FEATURE_NAME']).load()
+        GB.speaker_adaptation(FV_enr)
+        
+        ''' Testing the trained models '''
+        test_key = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
+        FV_test = LoadFeatures(info=feat_info_[test_key], feature_name=CFG['FEATURE_NAME']).load()
+        scores_ = GB.get_speaker_scores(FV_test)
+        print(scores_)
+        

@@ -20,7 +20,7 @@ Coding conventions followed:
     Function names:   Should have all lower-case alphabets [a-z]
                       Should follow snake case. [this_is_a_snake_case]
                       Should not include numerals [0-9]
-                      Can include underscore "_"
+                      Can start with an underscore "_"
     
     Class names:      Can have a combination of lower-case [a-z] and upper-case 
                       alphabets [A-Z]

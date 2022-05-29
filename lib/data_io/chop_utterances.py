@@ -117,18 +117,22 @@ class ChopUtterances:
 
         '''
         for data_type_ in meta_info.keys():
-            if data_type_=='DEV':
+            chop_size_ = None
+            if data_type_.startswith('DEV'):
                 chop_size_ = self.DEV_CHOP_SIZE
-            elif data_type_=='ENR':
+            elif data_type_.startswith('ENR'):
                 chop_size_ = self.ENR_CHOP_SIZE
-            elif data_type_=='TEST':
+            elif data_type_.startswith('TEST'):
                 chop_size_ = self.TEST_CHOP_SIZE
-                
+            
+            utter_count = 0
             for utterance_id_ in meta_info[data_type_].keys():
+                utter_count += 1
+                print(f'{data_type_} {utterance_id_} ({utter_count}/{len(meta_info[data_type_].keys())})')
                 fName_ = meta_info[data_type_][utterance_id_]['wav_path'].split('/')[-1]
                 data_path_ = path + '/' + meta_info[data_type_][utterance_id_]['wav_path']
                 if not os.path.exists(data_path_):
-                    print('WAV file does not exist ', data_path_)
+                    print('\tWAV file does not exist ', data_path_)
                     continue
                 
                 # Create the output directory to store the chop details csv files
@@ -137,7 +141,7 @@ class ChopUtterances:
                     os.makedirs(opDir_path_)
                 opFile_ = opDir_path_ + '/' + fName_.split('.')[0] + '.csv'
                 if os.path.exists(opFile_):
-                    print(f'{fName_} chopping details already stored')
+                    print(f'\t{fName_} chopping details already stored')
                     continue
                 
                 nonsil_intervals_, nSamples_ = self.get_non_silence_intervals(data_path_)
@@ -161,4 +165,4 @@ class ChopUtterances:
                             smpStart_ = smpEnd_
                         else:
                             continue
-                print(f'{data_type_} {utterance_id_}/{len(meta_info.keys())} {fName_} chop details stored')
+                    print(f'\t{fName_} chop details stored for duration={spldur_}s')

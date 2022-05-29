@@ -29,14 +29,14 @@ class MFCC:
         self.EXCL_C0 =config['EXCL_C0']
     
     
-    def ener_mfcc(self, Xin_split, mfcc):
+    def ener_mfcc(self, y, mfcc):
         '''
         Selection of MFCC feature vectors based on VAD threshold of 60% of
         average energy
 
         Parameters
         ----------
-        Xin_split : 1D array
+        y : 1D array
             Audio samples for sub-utterance.
         mfcc : 2D array
             MFCC feature vectors for the sub-utterance.
@@ -48,7 +48,7 @@ class MFCC:
             threshold.
 
         '''
-        astf_ = np.abs(librosa.stft(y=Xin_split, n_fft=2048, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False))
+        astf_ = np.abs(librosa.stft(y=y, n_fft=2048, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False))
         # squared absolute short term frequency
         sastf_ = np.square(astf_)
         # short term energy 
@@ -89,15 +89,25 @@ class MFCC:
 
         Returns
         -------
-        None.
+        feature_details_ : dict 
+            A dictionary containing the information of all features. The
+            following name-value pairs are available:
+                'DEV': {split_id:{'feature_name':<>, 'utterance_id':<>, 'file_path':<>, 'speaker_id':<>}}
+                'ENR': {split_id:{'feature_name':<>, 'utterance_id':<>, 'file_path':<>, 'speaker_id':<>}}
+                'TEST': {split_id:{'feature_name':<>, 'utterance_id':<>, 'file_path':<>, 'speaker_id':<>}}
 
         '''
+        feature_details_ = {}
         for data_type_ in meta_info.keys():
+            feature_details_[data_type_] = {}
+            utter_count_ = 0
             for utterance_id_ in meta_info[data_type_].keys():
+                print(f'{data_type_}\t{utterance_id_}\t({utter_count_}/{len(meta_info[data_type_].keys())}):')
                 fName_ = meta_info[data_type_][utterance_id_]['wav_path'].split('/')[-1]
                 data_path_ = base_path + '/' + meta_info[data_type_][utterance_id_]['wav_path']
+                speaker_id_ = utterance_id_.split('_')[1]
                 if not os.path.exists(data_path_):
-                    print('WAV file does not exist ', data_path_)
+                    print('\tWAV file does not exist ', data_path_)
                     continue
     
                 opDir_path_ = feat_dir + '/'
@@ -106,25 +116,38 @@ class MFCC:
                 
                 chop_details_fName_ = split_dir + '/' + '/'.join(meta_info[data_type_][utterance_id_]['wav_path'].split('/')[:-1]) + '/' + fName_.split('.')[0] + '.csv'
                 if not os.path.exists(chop_details_fName_):
-                    print(f'{chop_details_fName_} Utterance chop details unavailable')
+                    print(f'\t{chop_details_fName_} Utterance chop details unavailable')
                     continue
-    
-                Xin_, fs_ = librosa.load(data_path_, mono=True, sr=self.SAMPLING_RATE)
-                Xin_ = Normalize().mean_max_normalize(Xin_)
+                
+                utter_count_ += 1
                 with open(chop_details_fName_, 'r', encoding='utf8') as fid_:
                     reader_ = csv.DictReader(fid_)
                     for row_ in reader_:
                         split_id_ = row_['split_id']
                         first_sample_ = int(row_['first_sample'])
                         last_sample_ = int(row_['last_sample'])
-                        duration_ = float(row_['duration'])
+                        # duration_ = float(row_['duration'])
                 
                         opFile_ = opDir_path_ + '/' + split_id_ + '.npy'
+                        feature_details_[data_type_][split_id_] = {
+                            'feature_name':'MFCC', 
+                            'utterance_id':utterance_id_, 
+                            'file_path':opFile_, 
+                            'speaker_id':speaker_id_
+                            }
+                        # Check if feature file already exists
                         if os.path.exists(opFile_):
-                            print(f'{data_type_} {utterance_id_}/{len(meta_info[data_type_].keys())} {fName_} {split_id_} feature already computed')
+                            print(f'\t{split_id_} feature available')
                             continue
                         
-                        Xin_split_ = Xin_[first_sample_:last_sample_]
+                        if not 'Xin_' in locals(): # Check if the wav has already been loaded
+                            Xin_, fs_ = librosa.load(data_path_, mono=True, sr=self.SAMPLING_RATE)
+                            Xin_ = Normalize().mean_max_normalize(Xin_)
+                                                    
+                        Xin_split_ = Xin_[first_sample_:last_sample_].copy()
+                        if len(Xin_split_)<self.FRAME_LENGTH:
+                            del feature_details_[data_type_][split_id_]
+                            continue
                         
                         # Exclude c0 from mfcc computation
                         if self.EXCL_C0:
@@ -142,7 +165,8 @@ class MFCC:
                         # Selection of voiced frames
                         voiced_mfcc_ = self.ener_mfcc(Xin_split_, mfcc_)
                         np.save(opFile_, voiced_mfcc_)
-                        print(f'{data_type_} {utterance_id_}/{len(meta_info[data_type_].keys())} {fName_} {split_id_} mfcc={np.shape(voiced_mfcc_)} duration={duration_}')
                         
-        return
+                        print(f'\t({utter_count_}/{len(meta_info[data_type_].keys())})\t{split_id_} MFCC feature_shape={np.shape(voiced_mfcc_)}')
+                        
+        return feature_details_
     
