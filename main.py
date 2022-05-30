@@ -123,6 +123,7 @@ def get_configurations(args):
     CFG = {
         'today': datetime.datetime.now().strftime("%Y-%m-%d"),
         'SAMPLING_RATE': int(section['sampling_rate']),             # Sampling rate to be used for the audio files
+        'NFFT': int(section['n_fft']),                              # Number of DFT points to be used
         'FRAME_SIZE': int(section['frame_size']),                   # Short-term frame size in miliseconds
         'FRAME_SHIFT': int(section['frame_shift']),                 # Short-term frame shift in miliseconds 
         'DEV_CHOP': [json.loads(config.get('MAIN', 'DEV_chop'))],   # Development sub-utterance sizes
@@ -241,18 +242,18 @@ if __name__ == '__main__':
             
     if CFG['MODEL_TYPE']=='GMM_UBM':
         dev_key = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
-        FV_dev = LoadFeatures(info=feat_info_[dev_key], feature_name=CFG['FEATURE_NAME']).load()
+        FV_dev = LoadFeatures(info=feat_info_[dev_key[0]], feature_name=CFG['FEATURE_NAME']).load()
         GB = GaussianBackground(model_dir=CFG['MODEL_DIR'], num_mixtures=CFG['UBM_NCOMPONENTS'])
         GB.train_ubm(FV_dev)
         
         ''' Speaker-wise adaptation '''
         enr_key = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
-        FV_enr = LoadFeatures(info=feat_info_[enr_key], feature_name=CFG['FEATURE_NAME']).load()
+        FV_enr = LoadFeatures(info=feat_info_[enr_key[0]], feature_name=CFG['FEATURE_NAME']).load()
         GB.speaker_adaptation(FV_enr)
         
         ''' Testing the trained models '''
         test_key = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
-        FV_test = LoadFeatures(info=feat_info_[test_key], feature_name=CFG['FEATURE_NAME']).load()
+        FV_test = LoadFeatures(info=feat_info_[test_key[0]], feature_name=CFG['FEATURE_NAME']).load()
         scores_ = GB.get_speaker_scores(FV_test)
         print(scores_)
         

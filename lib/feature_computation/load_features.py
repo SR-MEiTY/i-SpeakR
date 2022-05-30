@@ -31,6 +31,7 @@ class LoadFeatures:
         self.INFO = info
         self.FEATURE_NAME = feature_name
         
+        
     
     def load(self):
         '''
@@ -58,7 +59,7 @@ class LoadFeatures:
                 fv = fv.T
             if speaker_id_ not in feature_vectors_.keys():
                 feature_vectors_[speaker_id_] = np.empty([], dtype=np.float32)
-            
+                        
             if np.size(feature_vectors_[speaker_id_])<=1:
                 feature_vectors_[speaker_id_] = np.array(fv, ndmin=2)
             else:

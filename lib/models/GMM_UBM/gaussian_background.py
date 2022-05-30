@@ -10,6 +10,7 @@ import numpy as np
 from lib.models.GMM_UBM.speaker_adaptation import SpeakerAdaptation
 import pickle
 import os
+from sklearn.cluster import KMeans
 
 
 class GaussianBackground:
@@ -46,16 +47,16 @@ class GaussianBackground:
         '''
         ubm_fName = self.MODEL_DIR + '/ubm.pkl'
         if not os.path.exists(ubm_fName):
-            X_combined = np.empty([], dtype=np.float32)
+            X_combined_ = np.empty([], dtype=np.float32)
             for speaker_id_ in X.keys():
-                if np.size(X_combined)<=1:
-                    X_combined = X[speaker_id_]
+                if np.size(X_combined_)<=1:
+                    X_combined_ = X[speaker_id_]
                 else:
-                    X_combined = np.append(X_combined, X[speaker_id_], axis=0)
-            print(f'X_combined={np.shape(X_combined)}')
+                    X_combined_ = np.append(X_combined_, X[speaker_id_], axis=0)
+            print(f'X_combined={np.shape(X_combined_)}')
             
             self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose)
-            self.BACKGROUND_MODEL.fit(X_combined)
+            self.BACKGROUND_MODEL.fit(X_combined_)
             
             with open(ubm_fName, 'wb') as f:
                 pickle.dump(self.BACKGROUND_MODEL, f, pickle.HIGHEST_PROTOCOL)

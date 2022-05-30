@@ -13,6 +13,7 @@ from lib.preprocessing.normalize import Normalize
 
 class MFCC:
     SAMPLING_RATE = 0
+    NFFT = 0
     FRAME_LENGTH = 0
     HOP_LENGTH = 0
     N_MELS = 0
@@ -21,6 +22,7 @@ class MFCC:
     
     def __init__(self, config):
         self.SAMPLING_RATE = int(config['SAMPLING_RATE'])
+        self.NFFT = int(config['NFFT'])
         self.FRAME_LENGTH = int(config['FRAME_SIZE']*self.SAMPLING_RATE/1000)
         self.HOP_LENGTH = int(config['FRAME_SHIFT']*self.SAMPLING_RATE/1000)
         self.N_MELS = int(config['N_MELS'])
@@ -48,7 +50,7 @@ class MFCC:
             threshold.
 
         '''
-        astf_ = np.abs(librosa.stft(y=y, n_fft=2048, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False))
+        astf_ = np.abs(librosa.stft(y=y, n_fft=self.NFFT, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False))
         # squared absolute short term frequency
         sastf_ = np.square(astf_)
         # short term energy 
@@ -143,18 +145,23 @@ class MFCC:
                         if not 'Xin_' in locals(): # Check if the wav has already been loaded
                             Xin_, fs_ = librosa.load(data_path_, mono=True, sr=self.SAMPLING_RATE)
                             Xin_ = Normalize().mean_max_normalize(Xin_)
-                                                    
+                        
+                        Xin_split_ = None
                         Xin_split_ = Xin_[first_sample_:last_sample_].copy()
-                        if len(Xin_split_)<self.FRAME_LENGTH:
+                        if len(Xin_split_)<=self.NFFT:
                             del feature_details_[data_type_][split_id_]
                             continue
                         
                         # Exclude c0 from mfcc computation
                         if self.EXCL_C0:
-                            mfcc_ = librosa.feature.mfcc(y=Xin_split_, sr=fs_, n_mfcc=self.N_MFCC+1, dct_type=2, norm='ortho', lifter=0, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False, n_mels=self.N_MELS)
+                            mfcc_ = librosa.feature.mfcc(y=Xin_split_, sr=fs_, n_mfcc=self.N_MFCC+1, dct_type=2, norm='ortho', lifter=0, n_fft=self.NFFT, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False, n_mels=self.N_MELS)
                             mfcc_ = mfcc_[1:,:] # excluding c0
                         else:
-                            mfcc_ = librosa.feature.mfcc(y=Xin_split_, sr=fs_, n_mfcc=self.N_MFCC, dct_type=2, norm='ortho', lifter=0, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False, n_mels=self.N_MELS)
+                            mfcc_ = librosa.feature.mfcc(y=Xin_split_, sr=fs_, n_mfcc=self.N_MFCC, dct_type=2, norm='ortho', lifter=0, n_fft=self.NFFT, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False, n_mels=self.N_MELS)
+
+                        if np.shape(mfcc_)[1]<=self.DELTA_WIN:
+                            del feature_details_[data_type_][split_id_]
+                            continue
                             
                         if delta:
                             delta_mfcc_ = librosa.feature.delta(mfcc_, width=self.DELTA_WIN, order=1, axis=-1)
