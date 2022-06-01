@@ -168,7 +168,10 @@ class GaussianBackground:
             each enrollment speaker. N is the number of speakers.
 
         '''
-        score_fName_ = opDir + '/' + opFileName.split('.')[0] + '.pkl'
+        if duration:
+            score_fName_ = opDir + '/' + opFileName.split('.')[0] + '_' + str(duration) + 's.pkl'
+        else:
+            score_fName_ = opDir + '/' + opFileName.split('.')[0] + '.pkl'
         if not os.path.exists(score_fName_):
             if not self.BACKGROUND_MODEL:
                 ubm_fName_ = self.MODEL_DIR + '/ubm.pkl'
@@ -184,6 +187,21 @@ class GaussianBackground:
             num_speakers_ = len(X_TEST.keys())
             true_lab_ = []
             pred_lab_ = []
+
+            
+            ''' Loading the speaker models '''
+            enr_speaker_model_ = {}
+            for enr_j_ in enrolled_speakers_:
+                enr_speaker_opDir_ = self.MODEL_DIR + '/' + enr_j_ + '/'
+                enr_speaker_model_fName_ = enr_speaker_opDir_ + '/adapted_ubm.pkl'
+                if not os.path.exists(enr_speaker_model_fName_):
+                    print(f'GMM model does not exist for speaker={enr_j_}')
+                    continue
+                with open(enr_speaker_model_fName_, 'rb') as f_:
+                    enr_speaker_model_[enr_j_] = pickle.load(f_)
+
+
+            ''' Testing each sub-utterance with each speaker model '''
             for speaker_id_i_ in X_TEST.keys():
                 speaker_count_ += 1
                 split_count_ = 0
@@ -208,16 +226,16 @@ class GaussianBackground:
                     max_score_ = -9999999
                     matched_speaker_id_ = ''
                     for enr_j_ in enrolled_speakers_:
-                        enr_speaker_opDir_ = self.MODEL_DIR + '/' + enr_j_ + '/'
-                        enr_speaker_model_fName_ = enr_speaker_opDir_ + '/adapted_ubm.pkl'
-                        if not os.path.exists(enr_speaker_model_fName_):
-                            print(f'GMM model does not exist for speaker={enr_j_}')
-                            continue
-                        enr_speaker_model_ = None
-                        with open(enr_speaker_model_fName_, 'rb') as f_:
-                            enr_speaker_model_ = pickle.load(f_)
+                        # enr_speaker_opDir_ = self.MODEL_DIR + '/' + enr_j_ + '/'
+                        # enr_speaker_model_fName_ = enr_speaker_opDir_ + '/adapted_ubm.pkl'
+                        # if not os.path.exists(enr_speaker_model_fName_):
+                        #     print(f'GMM model does not exist for speaker={enr_j_}')
+                        #     continue
+                        # enr_speaker_model_ = None
+                        # with open(enr_speaker_model_fName_, 'rb') as f_:
+                        #     enr_speaker_model_ = pickle.load(f_)
                         
-                        all_enr_speaker_scores_[enr_j_] = enr_speaker_model_.score(fv_) - self.BACKGROUND_MODEL.score(fv_)
+                        all_enr_speaker_scores_[enr_j_] = enr_speaker_model_[enr_j_].score(fv_) - self.BACKGROUND_MODEL.score(fv_)
                         if all_enr_speaker_scores_[enr_j_]>max_score_:
                             max_score_ = all_enr_speaker_scores_[enr_j_]
                             matched_speaker_id_ = enr_j_

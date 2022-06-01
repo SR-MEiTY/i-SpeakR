@@ -33,10 +33,14 @@ class LoadFeatures:
         
         
     
-    def load(self):
+    def load(self, dim=None):
         '''
         Load the feature vectors.
-
+        
+        Parameters
+        ----------
+        dim: int, optional
+            Number of dimensions of the features.
         Returns
         -------
         feature_vectors_ : dict
@@ -55,7 +59,10 @@ class LoadFeatures:
             feature_path_ = self.INFO[split_id_]['file_path']
             fv = np.load(feature_path_, allow_pickle=True)
             # The feature vectors must be stored as individual rows in the 2D array
-            if np.shape(fv)[1]>np.shape(fv)[0]:
+            if dim:
+                if np.shape(fv)[0]==dim:
+                    fv = fv.T
+            elif np.shape(fv)[1]>np.shape(fv)[0]:
                 fv = fv.T
             feature_vectors_[speaker_id_][split_id_] = np.array(fv, ndmin=2)
                         

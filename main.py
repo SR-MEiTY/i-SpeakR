@@ -251,38 +251,51 @@ if __name__ == '__main__':
             num_mixtures=CFG['UBM_NCOMPONENTS'], 
             feat_scaling=CFG['FEATURE_SCALING']
             )
-
+        
+        '''
+        Training the GMM-UBM model
+        '''
         dev_key_ = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
         if not os.path.exists(CFG['OUTPUT_DIR']+'/DEV_Data.pkl'):
-            FV_dev_ = LoadFeatures(info=feat_info_[dev_key_[0]], feature_name=CFG['FEATURE_NAME']).load()
-            with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'wb') as f_:
-                pickle.dump(FV_dev_, f_, pickle.HIGHEST_PROTOCOL)
+            FV_dev_ = LoadFeatures(info=feat_info_[dev_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
+            # with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'wb') as f_:
+            #     pickle.dump(FV_dev_, f_, pickle.HIGHEST_PROTOCOL)
         else:
             with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'rb') as f_:
                 FV_dev_ = pickle.load(f_)
         GB_.train_ubm(FV_dev_)
         
-        ''' Speaker-wise adaptation '''
+        
+        ''' 
+        Speaker-wise adaptation 
+        '''
         enr_key_ = list(filter(None, [key if key.startswith('ENR') else '' for key in feat_info_.keys()]))
         if not os.path.exists(CFG['OUTPUT_DIR']+'/ENR_Data.pkl'):
-            FV_enr_ = LoadFeatures(info=feat_info_[enr_key_[0]], feature_name=CFG['FEATURE_NAME']).load()
-            with open(CFG['OUTPUT_DIR']+'/ENR_Data.pkl', 'wb') as f_:
-                pickle.dump(FV_enr_, f_, pickle.HIGHEST_PROTOCOL)
+            FV_enr_ = LoadFeatures(info=feat_info_[enr_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
+            # with open(CFG['OUTPUT_DIR']+'/ENR_Data.pkl', 'wb') as f_:
+            #     pickle.dump(FV_enr_, f_, pickle.HIGHEST_PROTOCOL)
         else:
             with open(CFG['OUTPUT_DIR']+'/ENR_Data.pkl', 'rb') as f_:
                 FV_enr_ = pickle.load(f_)
         GB_.speaker_adaptation(FV_enr_, use_adapt_w_cov=False)
         
-        ''' Testing the trained models '''
+        
+        ''' 
+        Testing the trained models 
+        '''
         test_key_ = list(filter(None, [key if key.startswith('TEST') else '' for key in feat_info_.keys()]))
         if not os.path.exists(CFG['OUTPUT_DIR']+'/TEST_Data.pkl'):
-            FV_test_ = LoadFeatures(info=feat_info_[test_key_[0]], feature_name=CFG['FEATURE_NAME']).load()
-            with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'wb') as f_:
-                pickle.dump(FV_test_, f_, pickle.HIGHEST_PROTOCOL)
+            FV_test_ = LoadFeatures(info=feat_info_[test_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
+            # with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'wb') as f_:
+            #     pickle.dump(FV_test_, f_, pickle.HIGHEST_PROTOCOL)
         else:
             with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'rb') as f_:
                 FV_test_ = pickle.load(f_)
             
+            
+        ''' 
+        Computing the performance metrics 
+        '''
         for utter_dur_ in CFG['TEST_CHOP']:
             res_fName = CFG['OUTPUT_DIR']+'/Result_'+str(utter_dur_)+'s.pkl'
             if not os.path.exists(res_fName):
