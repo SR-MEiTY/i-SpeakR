@@ -29,7 +29,7 @@ class ChopUtterances:
         self.SAMPLING_RATE = config['SAMPLING_RATE']
         self.FRAME_LENGTH = int(config['FRAME_SIZE']*self.SAMPLING_RATE/1000)
         self.HOP_LENGTH = int(config['FRAME_SHIFT']*self.SAMPLING_RATE/1000)
-        self.SPLITS_DIR = config['opDir'] + '/sub_utterance_info/'
+        self.SPLITS_DIR = config['OUTPUT_DIR'] + '/sub_utterance_info/'
         if not os.path.exists(self.SPLITS_DIR):
             os.makedirs(self.SPLITS_DIR)
             
@@ -102,7 +102,10 @@ class ChopUtterances:
             <Utterance-ID>_<Chop Size>_<Split count formatted as a 3-digit number>
         
         Utterance-ID structure:
-            <DEV/ENR/TEST>_<Speaker-ID>_<File Name>
+            "infer" mode:
+                <DEV/ENR/TEST>_<Speaker-ID>_<File Name>
+            "specify" mode:
+                <Speaker-ID>_<File Name>
 
         Parameters
         ----------

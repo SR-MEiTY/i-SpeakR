@@ -57,13 +57,7 @@ class LoadFeatures:
             # The feature vectors must be stored as individual rows in the 2D array
             if np.shape(fv)[1]>np.shape(fv)[0]:
                 fv = fv.T
-            if speaker_id_ not in feature_vectors_.keys():
-                feature_vectors_[speaker_id_] = np.empty([], dtype=np.float32)
+            feature_vectors_[speaker_id_][split_id_] = np.array(fv, ndmin=2)
                         
-            if np.size(feature_vectors_[speaker_id_])<=1:
-                feature_vectors_[speaker_id_] = np.array(fv, ndmin=2)
-            else:
-                feature_vectors_[speaker_id_] = np.append(feature_vectors_[speaker_id_], np.array(fv, ndmin=2), axis=0)
-            
         return feature_vectors_            
         

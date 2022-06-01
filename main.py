@@ -22,6 +22,7 @@ import sys
 import datetime
 import os
 import numpy as np
+import pickle
 
 
 def select_data_sets(info):
@@ -135,23 +136,27 @@ def get_configurations(args):
         'DELTA_WIN': int(section['delta_win']),                     # Context window to be used for computing Delta features
         'EXCL_C0': section.getboolean('excl_c0'),                   # Boolean flag indicating whether MFCC c0 to be used or not. True indicates c0 is included. False indicates c0 is to be ignored and N_MFCC+1 coefficients to be computed
         'FEATURE_NAME': section['feature_name'],                    # Parameter to indicate which feature to compute
+        'FEATURE_SCALING': int(section['feature_scaling']),         # Type of feature scaling to be used.
+                                                                    # 0: no scaling, 
+                                                                    # 1: only mean subtraction,      
+                                                                    # 2: mean and variance scaling
         'MODEL_TYPE': section['model'],                             # Parameter indicating which model to use
         'UBM_NCOMPONENTS': int(section['UBM_ncomp']),               # Number of Gaussian components for the UBM model
         }
 
-    CFG['opDir'] = args.output_path + '/i-SpeakR_output/' + args.data_path.split('/')[-2] + '_' + CFG['today'] + '/'
-    if not os.path.exists(CFG['opDir']):
-        os.makedirs(CFG['opDir'])
+    CFG['OUTPUT_DIR'] = args.output_path + '/i-SpeakR_output/' + args.data_path.split('/')[-2] + '_' + CFG['today'] + '/'
+    if not os.path.exists(CFG['OUTPUT_DIR']):
+        os.makedirs(CFG['OUTPUT_DIR'])
         
-    CFG['SPLITS_DIR'] = CFG['opDir'] + '/sub_utterance_info/'
+    CFG['SPLITS_DIR'] = CFG['OUTPUT_DIR'] + '/sub_utterance_info/'
     if not os.path.exists(CFG['SPLITS_DIR']):
         os.makedirs(CFG['SPLITS_DIR'])
 
-    CFG['FEAT_DIR'] = CFG['opDir'] + '/features/' + CFG['FEATURE_NAME'] + '/'
+    CFG['FEAT_DIR'] = CFG['OUTPUT_DIR'] + '/features/' + CFG['FEATURE_NAME'] + '/'
     if not os.path.exists(CFG['FEAT_DIR']):
         os.makedirs(CFG['FEAT_DIR'])
 
-    CFG['MODEL_DIR'] = CFG['opDir'] + '/models/' + CFG['FEATURE_NAME'] + '_' + CFG['MODEL_TYPE'] + '/'
+    CFG['MODEL_DIR'] = CFG['OUTPUT_DIR'] + '/models/' + CFG['FEATURE_NAME'] + '_' + CFG['MODEL_TYPE'] + '/'
     if not os.path.exists(CFG['MODEL_DIR']):
         os.makedirs(CFG['MODEL_DIR'])
     
@@ -241,19 +246,48 @@ if __name__ == '__main__':
         feat_info_ = MFCC(config=CFG).compute(args.data_path, metaobj.INFO, CFG['SPLITS_DIR'], CFG['FEAT_DIR'], delta=True)
             
     if CFG['MODEL_TYPE']=='GMM_UBM':
-        dev_key = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
-        FV_dev = LoadFeatures(info=feat_info_[dev_key[0]], feature_name=CFG['FEATURE_NAME']).load()
-        GB = GaussianBackground(model_dir=CFG['MODEL_DIR'], num_mixtures=CFG['UBM_NCOMPONENTS'])
-        GB.train_ubm(FV_dev)
+        GB_ = GaussianBackground(
+            model_dir=CFG['MODEL_DIR'], 
+            num_mixtures=CFG['UBM_NCOMPONENTS'], 
+            feat_scaling=CFG['FEATURE_SCALING']
+            )
+
+        dev_key_ = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
+        if not os.path.exists(CFG['OUTPUT_DIR']+'/DEV_Data.pkl'):
+            FV_dev_ = LoadFeatures(info=feat_info_[dev_key_[0]], feature_name=CFG['FEATURE_NAME']).load()
+            with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'wb') as f_:
+                pickle.dump(FV_dev_, f_, pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'r') as f_:
+                FV_dev_ = pickle.load(f_)
+        GB_.train_ubm(FV_dev_)
         
         ''' Speaker-wise adaptation '''
-        enr_key = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
-        FV_enr = LoadFeatures(info=feat_info_[enr_key[0]], feature_name=CFG['FEATURE_NAME']).load()
-        GB.speaker_adaptation(FV_enr)
+        enr_key_ = list(filter(None, [key if key.startswith('ENR') else '' for key in feat_info_.keys()]))
+        if not os.path.exists(CFG['OUTPUT_DIR']+'/ENR_Data.pkl'):
+            FV_enr_ = LoadFeatures(info=feat_info_[enr_key_[0]], feature_name=CFG['FEATURE_NAME']).load()
+            with open(CFG['OUTPUT_DIR']+'/ENR_Data.pkl', 'wb') as f_:
+                pickle.dump(FV_enr_, f_, pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(CFG['OUTPUT_DIR']+'/ENR_Data.pkl', 'r') as f_:
+                FV_enr_ = pickle.load(f_)
+        GB_.speaker_adaptation(FV_enr_)
         
         ''' Testing the trained models '''
-        test_key = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
-        FV_test = LoadFeatures(info=feat_info_[test_key[0]], feature_name=CFG['FEATURE_NAME']).load()
-        scores_ = GB.get_speaker_scores(FV_test)
-        print(scores_)
+        test_key_ = list(filter(None, [key if key.startswith('TEST') else '' for key in feat_info_.keys()]))
+        if not os.path.exists(CFG['OUTPUT_DIR']+'/TEST_Data.pkl'):
+            FV_test_ = LoadFeatures(info=feat_info_[test_key_[0]], feature_name=CFG['FEATURE_NAME']).load()
+            with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'wb') as f_:
+                pickle.dump(FV_test_, f_, pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'r') as f_:
+                FV_test_ = pickle.load(f_)
+        scores_ = GB_.perform_testing(FV_test_, opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores')
+        metrics_ = GB_.evaluate_performance(scores_, opDir=CFG['OUTPUT_DIR'])
         
+        print(f"Accuracy: {np.round(metrics_['accuracy'],4)}")
+        print(f"Precision: {np.round(np.mean(metrics_['precision']),4)}")
+        print(f"Recall: {np.round(np.mean(metrics_['recall']),4)}")
+        print(f"F1-score: {np.round(np.mean(metrics_['f1-score']),4)}")
+        print(f"EER: {np.round(np.mean(metrics_['eer']),4)}")
+            

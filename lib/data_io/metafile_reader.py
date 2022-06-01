@@ -69,6 +69,9 @@ class GetMetaInfo:
         '''
         Read the meta file and load the information.
 
+        Utterance-ID structure:
+            "specify" mode:
+                <Speaker-ID>_<File Name>
         Returns
         -------
         None.
@@ -98,7 +101,8 @@ class GetMetaInfo:
         multiple utterances. 
         
         Utterance-ID structure:
-            <DEV/ENR/TEST>_<Speaker-ID>_<File Name>
+            "infer" mode:
+                <DEV/ENR/TEST>_<Speaker-ID>_<File Name>
 
         Returns
         -------

@@ -46,7 +46,10 @@ Structures for various IDs:
         [Utterance-ID]_[Chop Size]_[Split count formatted as a 3-digit number]
 
     Utterance-ID structure:
-        [DEV/ENR/TEST]_[Speaker-ID]_[File Name]
+        "infer" mode:
+            [DEV/ENR/TEST]_[Speaker-ID]_[File Name]
+        "specify" mode:
+            [Speaker-ID]_[File Name]
 
 
 

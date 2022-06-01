@@ -11,16 +11,22 @@ from lib.models.GMM_UBM.speaker_adaptation import SpeakerAdaptation
 import pickle
 import os
 from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from lib.metrics.performance_metrics import PerformanceMetrics
 
 
 class GaussianBackground:
     NCOMP = 0
     MODEL_DIR = ''
     BACKGROUND_MODEL = None
+    FEATURE_SCALING = 0
+    SCALER = None
     
-    def __init__(self, model_dir, num_mixtures=128):
+    
+    def __init__(self, model_dir, num_mixtures=128, feat_scaling=0):
         self.NCOMP = num_mixtures
         self.MODEL_DIR = model_dir
+        self.FEATURE_SCALING = feat_scaling
     
     
     def train_ubm(self, X, cov_type='diag', max_iterations=100, num_init=3, verbose=1):
@@ -49,11 +55,20 @@ class GaussianBackground:
         if not os.path.exists(ubm_fName):
             X_combined_ = np.empty([], dtype=np.float32)
             for speaker_id_ in X.keys():
-                if np.size(X_combined_)<=1:
-                    X_combined_ = X[speaker_id_]
-                else:
-                    X_combined_ = np.append(X_combined_, X[speaker_id_], axis=0)
+                for split_id_ in X[speaker_id_].keys():
+                    if np.size(X_combined_)<=1:
+                        X_combined_ = X[speaker_id_][split_id_]
+                    else:
+                        X_combined_ = np.append(X_combined_, X[speaker_id_][split_id_], axis=0)
             print(f'X_combined={np.shape(X_combined_)}')
+            
+            ''' Feature Scaling '''
+            if self.FEATURE_SCALING==1:
+                self.SCALER = StandardScaler(with_mean=True, with_std=False).fit(X_combined_)
+                X_combined_ = self.SCALER.transform(X_combined_)
+            elif self.FEATURE_SCALING==2:
+                self.SCALER = StandardScaler(with_mean=True, with_std=True).fit(X_combined_)
+                X_combined_ = self.SCALER.transform(X_combined_)
             
             self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose)
             self.BACKGROUND_MODEL.fit(X_combined_)
@@ -103,7 +118,19 @@ class GaussianBackground:
                 print(f'Adapted GMM model already available for speaker={speaker_id_}')
                 continue
 
-            fv_ = X_ENR[speaker_id_]
+            fv_ = np.empty([], dtype=np.float32)
+            for split_id_ in X_ENR[speaker_id_]:
+                if np.size(fv_)<=1:
+                    fv_ = X_ENR[speaker_id_][split_id_]
+                else:
+                    fv_ = np.append(fv_, X_ENR[speaker_id_][split_id_], axis=0)
+            
+            ''' Feature Scaling '''
+            if self.FEATURE_SCALING==1:
+                fv_ = self.SCALER.transform(fv_)
+            elif self.FEATURE_SCALING==2:
+                fv_ = self.SCALER.transform(fv_)
+
             adapt_ = SpeakerAdaptation().adapt_ubm(fv_.T, self.BACKGROUND_MODEL, use_adapt_w_cov)
             adapted_gmm_ = None
             adapted_gmm_ = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type)
@@ -118,7 +145,7 @@ class GaussianBackground:
             print(f'Adapted GMM model saved for speaker={speaker_id_}')
             
             
-    def get_speaker_scores(self, X_TEST):
+    def perform_testing(self, X_TEST, opDir, opFileName):
         '''
         Compute test speaker scores against all enrollment speaker models.
 
@@ -134,24 +161,128 @@ class GaussianBackground:
             each enrollment speaker. N is the number of speakers.
 
         '''
-        Scores_ = np.zeros((len(X_TEST), len(X_TEST)))
-        i = 0
-        for speaker_id_i_ in X_TEST.keys():
-            j = 0
-            speaker_models_ = next(os.walk(self.MODEL_DIR))[1]
-            for speaker_id_j_ in speaker_models_:
-                speaker_opDir_ = self.MODEL_DIR + '/' + speaker_id_j_ + '/'
-                speaker_model_fName_ = speaker_opDir_ + '/adapted_ubm.pkl'
-                if not os.path.exists(speaker_model_fName_):
-                    print(f'GMM model does not exist for speaker={speaker_id_j_}')
-                    continue
-                with open(speaker_model_fName_, 'rb') as f_:
-                    speaker_model_ = pickle.load(f_)
+        score_fName_ = opDir + '/' + opFileName.split('.')[0] + '.pkl'
+        if not os.path.exists(score_fName_):
+            if not self.BACKGROUND_MODEL:
+                ubm_fName_ = self.MODEL_DIR + '/ubm.pkl'
+                if not os.path.exists(ubm_fName_):
+                    print('Background model does not exist')
+                    return
+                with open(ubm_fName_, 'rb') as f_:
+                    self.BACKGROUND_MODEL = pickle.load(f_)
+    
+            enrolled_speakers_ = next(os.walk(self.MODEL_DIR))[1]
+            Scores_ = {}
+            speaker_count_ = 0
+            num_speakers_ = len(X_TEST.keys())
+            true_lab_ = []
+            pred_lab_ = []
+            for speaker_id_i_ in X_TEST.keys():
+                speaker_count_ += 1
+                split_count_ = 0
+                num_splits_ = len(X_TEST[speaker_id_i_].keys())
+                for split_id_ in X_TEST[speaker_id_i_].keys():
+                    split_count_ += 1
+                    fv_ = X_TEST[speaker_id_i_][split_id_]
                 
-                score_ = speaker_model_.score(X_TEST[speaker_id_j_])
-                Scores_[i,j] = score_
-                j += 1
-            i += 1
-            
-        return Scores_
+                    ''' Feature Scaling '''
+                    if self.FEATURE_SCALING==1:
+                        fv_ = self.SCALER.transform(fv_)
+                    elif self.FEATURE_SCALING==2:
+                        fv_ = self.SCALER.transform(fv_)
+                        
+                    all_enr_speaker_scores_ = {}
+                    max_score_ = -9999999
+                    matched_speaker_id_ = ''
+                    for enr_j_ in enrolled_speakers_:
+                        enr_speaker_opDir_ = self.MODEL_DIR + '/' + enr_j_ + '/'
+                        enr_speaker_model_fName_ = enr_speaker_opDir_ + '/adapted_ubm.pkl'
+                        if not os.path.exists(enr_speaker_model_fName_):
+                            print(f'GMM model does not exist for speaker={enr_j_}')
+                            continue
+                        enr_speaker_model_ = None
+                        with open(enr_speaker_model_fName_, 'rb') as f_:
+                            enr_speaker_model_ = pickle.load(f_)
+                        
+                        all_enr_speaker_scores_[enr_j_] = enr_speaker_model_.score(fv_) - self.BACKGROUND_MODEL.score(fv_)
+                        if all_enr_speaker_scores_[enr_j_]>max_score_:
+                            max_score_ = all_enr_speaker_scores_[enr_j_]
+                            matched_speaker_id_ = enr_j_
+                    Scores_[split_id_] = {'speaker_id':speaker_id_i_, 'enr_speaker_scores': all_enr_speaker_scores_, 'matched_speaker':matched_speaker_id_}
+                    
+                    ''' Displaying progress '''
+                    true_lab_.append(np.squeeze(np.where(enrolled_speakers_==speaker_id_i_)))
+                    pred_lab_.append(np.squeeze(np.where(enrolled_speakers_==matched_speaker_id_)))
+                    accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
+                    print(f'\t{split_id_} speakers=({speaker_count_}/{num_speakers_}) splits=({split_count_}/{num_splits_}) {speaker_id_i_} {matched_speaker_id_} max score={np.round(max_score_,4)} accuracy={accuracy_}%')
+
+            with open(score_fName_, 'wb') as f_:
+                pickle.dump(Scores_, f_, pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(score_fName_, 'rb') as f_:
+                Scores_ = pickle.load(f_)
         
+        return Scores_
+    
+    
+    def evaluate_performance(self, res, opDir):
+        '''
+        Compute performance metrics.
+
+        Parameters
+        ----------
+        res : dict
+            Dictionary containing the sub-utterance wise scores.
+        opDir : str
+            Output directory path.
+
+        Returns
+        -------
+        Metrics_ : dict
+            Disctionary containg the various evaluation metrics:
+                accuracy, precision, recall, f1-score, eer
+
+        '''
+        all_speaker_id_ = next(os.walk(self.MODEL_DIR))[1]
+        groundtruth_label_ = []
+        ptd_labels_ = []
+        groundtruth_scores_ = np.empty([])
+        predicted_scores_ = np.empty([])
+        for split_id_ in res.keys():
+            true_speaker_id_ = res[split_id_]['speaker_id']
+            pred_speaker_id_ = res[split_id_]['matched_speaker']
+            true_label_ = np.squeeze(np.where(all_speaker_id_==true_speaker_id_))
+            groundtruth_label_.append(true_label_)
+            ptd_labels_.append(np.squeeze(np.where(all_speaker_id_==pred_speaker_id_)))
+            gt_score_ = np.zeros((1,np.size(all_speaker_id_)))
+            gt_score_[true_label_] = 1
+            ptd_scores_ = np.zeros((1,np.size(all_speaker_id_)))
+            for speaker_id_ in res[split_id_]['enr_speaker_scores'].keys():
+                lab_ = np.squeeze(np.where(all_speaker_id_==speaker_id_))
+                ptd_scores_[lab_] = res[split_id_]['enr_speaker_scores'][speaker_id_]
+            if np.size(groundtruth_scores_)<=1:
+                groundtruth_scores_ = gt_score_
+                predicted_scores_ = ptd_scores_
+            else:
+                groundtruth_scores_ = np.append(groundtruth_scores_, gt_score_, axis=0)
+                predicted_scores_ = np.append(predicted_scores_, ptd_scores_, axis=0)
+        
+        confmat_, precision_, recall_, fscore_ = PerformanceMetrics().compute_identification_performance(groundtruth_label_, ptd_labels_, labels=list(range(np.size(all_speaker_id_))))
+        acc_ = np.sum(np.diag(confmat_))/np.sum(confmat_)
+
+        FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(groundtruth_scores_.flatten(), predicted_scores_.flatten())
+        
+        PerformanceMetrics().plot_roc(FPR_, TPR_, opDir)
+        
+        Metrics_ = {
+            'accuracy': acc_,
+            'precision': precision_,
+            'recall': recall_,
+            'f1-score': fscore_,
+            'fpr': FPR_,
+            'tpr': TPR_,
+            'eer': EER_,
+            'eer_threshold': EER_thresh_,
+            }
+        
+        return Metrics_

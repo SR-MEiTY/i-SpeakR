@@ -73,7 +73,10 @@ class MFCC:
             <Utterance-ID>_<Chop Size>_<Split count formatted as a 3-digit number>
 
         Utterance-ID structure:
-            <DEV/ENR/TEST>_<Speaker-ID>_<File Name>
+            "infer" mode:
+                <DEV/ENR/TEST>_<Speaker-ID>_<File Name>
+            "specify" mode:
+                <Speaker-ID>_<File Name>
 
         Parameters
         ----------
@@ -107,7 +110,11 @@ class MFCC:
                 print(f'{data_type_}\t{utterance_id_}\t({utter_count_}/{len(meta_info[data_type_].keys())}):')
                 fName_ = meta_info[data_type_][utterance_id_]['wav_path'].split('/')[-1]
                 data_path_ = base_path + '/' + meta_info[data_type_][utterance_id_]['wav_path']
-                speaker_id_ = utterance_id_.split('_')[1]
+                
+                # This way of obtaining speaker_id was wrong. Corrected on  01-Jun-22 
+                # speaker_id_ = utterance_id_.split('_')[1]
+                speaker_id_ = meta_info[data_type_][utterance_id_]['speaker_id']
+                
                 if not os.path.exists(data_path_):
                     print('\tWAV file does not exist ', data_path_)
                     continue
