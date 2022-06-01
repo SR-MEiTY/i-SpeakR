@@ -145,7 +145,7 @@ class GaussianBackground:
             print(f'Adapted GMM model saved for speaker={speaker_id_}')
             
             
-    def perform_testing(self, X_TEST, opDir, opFileName):
+    def perform_testing(self, X_TEST, opDir, opFileName, duration=None):
         '''
         Compute test speaker scores against all enrollment speaker models.
 
@@ -153,6 +153,13 @@ class GaussianBackground:
         ----------
         X_TEST : dict
             Dictionary containing the speaker-wise test data.
+        opDir : str
+            Output path.
+        opFileName : str
+            Output file name.
+        duration : str, optional
+            Selection of which utterance duration to test. Default, tests all
+            utterances.
 
         Returns
         -------
@@ -183,6 +190,12 @@ class GaussianBackground:
                 num_splits_ = len(X_TEST[speaker_id_i_].keys())
                 for split_id_ in X_TEST[speaker_id_i_].keys():
                     split_count_ += 1
+                    if duration:
+                        if not split_id_.split('_')[-2]==str(duration):
+                            continue
+                    
+                    fv_ = None
+                    del fv_
                     fv_ = X_TEST[speaker_id_i_][split_id_]
                 
                     ''' Feature Scaling '''
@@ -211,10 +224,12 @@ class GaussianBackground:
                     Scores_[split_id_] = {'speaker_id':speaker_id_i_, 'enr_speaker_scores': all_enr_speaker_scores_, 'matched_speaker':matched_speaker_id_}
                     
                     ''' Displaying progress '''
-                    true_lab_.append(np.squeeze(np.where(enrolled_speakers_==speaker_id_i_)))
-                    pred_lab_.append(np.squeeze(np.where(enrolled_speakers_==matched_speaker_id_)))
+                    lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_i_)))
+                    lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
+                    true_lab_.append(lab_true_)
+                    pred_lab_.append(lab_pred_)
                     accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
-                    print(f'\t{split_id_} speakers=({speaker_count_}/{num_speakers_}) splits=({split_count_}/{num_splits_}) {speaker_id_i_} {matched_speaker_id_} max score={np.round(max_score_,4)} accuracy={accuracy_}%')
+                    print(f'\t{split_id_} speakers=({speaker_count_}/{num_speakers_}) splits=({split_count_}/{num_splits_}) true={speaker_id_i_} ({lab_true_}) pred={matched_speaker_id_} ({lab_pred_}) max score={np.round(max_score_,4)} accuracy={accuracy_}%')
 
             with open(score_fName_, 'wb') as f_:
                 pickle.dump(Scores_, f_, pickle.HIGHEST_PROTOCOL)

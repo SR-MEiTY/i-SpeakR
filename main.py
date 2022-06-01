@@ -258,7 +258,7 @@ if __name__ == '__main__':
             with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'wb') as f_:
                 pickle.dump(FV_dev_, f_, pickle.HIGHEST_PROTOCOL)
         else:
-            with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'r') as f_:
+            with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'rb') as f_:
                 FV_dev_ = pickle.load(f_)
         GB_.train_ubm(FV_dev_)
         
@@ -269,9 +269,9 @@ if __name__ == '__main__':
             with open(CFG['OUTPUT_DIR']+'/ENR_Data.pkl', 'wb') as f_:
                 pickle.dump(FV_enr_, f_, pickle.HIGHEST_PROTOCOL)
         else:
-            with open(CFG['OUTPUT_DIR']+'/ENR_Data.pkl', 'r') as f_:
+            with open(CFG['OUTPUT_DIR']+'/ENR_Data.pkl', 'rb') as f_:
                 FV_enr_ = pickle.load(f_)
-        GB_.speaker_adaptation(FV_enr_)
+        GB_.speaker_adaptation(FV_enr_, use_adapt_w_cov=False)
         
         ''' Testing the trained models '''
         test_key_ = list(filter(None, [key if key.startswith('TEST') else '' for key in feat_info_.keys()]))
@@ -280,14 +280,25 @@ if __name__ == '__main__':
             with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'wb') as f_:
                 pickle.dump(FV_test_, f_, pickle.HIGHEST_PROTOCOL)
         else:
-            with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'r') as f_:
+            with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'rb') as f_:
                 FV_test_ = pickle.load(f_)
-        scores_ = GB_.perform_testing(FV_test_, opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores')
-        metrics_ = GB_.evaluate_performance(scores_, opDir=CFG['OUTPUT_DIR'])
-        
-        print(f"Accuracy: {np.round(metrics_['accuracy'],4)}")
-        print(f"Precision: {np.round(np.mean(metrics_['precision']),4)}")
-        print(f"Recall: {np.round(np.mean(metrics_['recall']),4)}")
-        print(f"F1-score: {np.round(np.mean(metrics_['f1-score']),4)}")
-        print(f"EER: {np.round(np.mean(metrics_['eer']),4)}")
             
+        for utter_dur_ in CFG['TEST_CHOP']:
+            res_fName = CFG['OUTPUT_DIR']+'/Result_'+str(utter_dur_)+'s.pkl'
+            if not os.path.exists(res_fName):
+                scores_ = GB_.perform_testing(FV_test_, opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores', duration=utter_dur_)
+                metrics_ = GB_.evaluate_performance(scores_, opDir=CFG['OUTPUT_DIR'])
+                with open(res_fName, 'wb') as f_:
+                    pickle.dump({'scores':scores_, 'metrics':metrics_}, f_, pickle.HIGHEST_PROTOCOL)
+            else:
+                with open(res_fName, 'rb') as f_:
+                    scores_ = pickle.load(f_)['scores']
+                    metrics_ = pickle.load(f_)['metrics']
+                
+            print(f'Utterance duration: {utter_dur_}s:\n__________________________________________')
+            print(f"\tAccuracy: {np.round(metrics_['accuracy'],4)}")
+            print(f"\tPrecision: {np.round(np.mean(metrics_['precision']),4)}")
+            print(f"\tRecall: {np.round(np.mean(metrics_['recall']),4)}")
+            print(f"\tF1-score: {np.round(np.mean(metrics_['f1-score']),4)}")
+            print(f"\tEER: {np.round(np.mean(metrics_['eer']),4)}")
+                
