@@ -16,6 +16,7 @@ from lib.data_io.chop_utterances import ChopUtterances
 from lib.feature_computation.compute_mfcc import MFCC
 from lib.feature_computation.load_features import LoadFeatures
 from lib.models.GMM_UBM.gaussian_background import GaussianBackground
+from lib.metrics.performance_metrics import PerformanceMetrics
 import configparser
 import json
 import sys
@@ -159,6 +160,10 @@ def get_configurations(args):
     CFG['MODEL_DIR'] = CFG['OUTPUT_DIR'] + '/models/' + CFG['FEATURE_NAME'] + '_' + CFG['MODEL_TYPE'] + '/'
     if not os.path.exists(CFG['MODEL_DIR']):
         os.makedirs(CFG['MODEL_DIR'])
+
+    CFG['FIG_DIR'] = CFG['OUTPUT_DIR'] + '/figures/'
+    if not os.path.exists(CFG['FIG_DIR']):
+        os.makedirs(CFG['FIG_DIR'])
     
     return CFG
     
@@ -279,19 +284,6 @@ if __name__ == '__main__':
                 FV_enr_ = pickle.load(f_)
         GB_.speaker_adaptation(FV_enr_, use_adapt_w_cov=False)
         
-        
-        ''' 
-        Testing the trained models 
-        '''
-        test_key_ = list(filter(None, [key if key.startswith('TEST') else '' for key in feat_info_.keys()]))
-        if not os.path.exists(CFG['OUTPUT_DIR']+'/TEST_Data.pkl'):
-            FV_test_ = LoadFeatures(info=feat_info_[test_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
-            # with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'wb') as f_:
-            #     pickle.dump(FV_test_, f_, pickle.HIGHEST_PROTOCOL)
-        else:
-            with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'rb') as f_:
-                FV_test_ = pickle.load(f_)
-            
             
         ''' 
         Computing the performance metrics 
@@ -299,19 +291,42 @@ if __name__ == '__main__':
         for utter_dur_ in CFG['TEST_CHOP']:
             res_fName = CFG['OUTPUT_DIR']+'/Result_'+str(utter_dur_)+'s.pkl'
             if not os.path.exists(res_fName):
+                
+                ''' 
+                Testing the trained models 
+                '''
+                test_key_ = list(filter(None, [key if key.startswith('TEST') else '' for key in feat_info_.keys()]))
+                if not os.path.exists(CFG['OUTPUT_DIR']+'/TEST_Data.pkl'):
+                    FV_test_ = LoadFeatures(info=feat_info_[test_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
+                    # with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'wb') as f_:
+                    #     pickle.dump(FV_test_, f_, pickle.HIGHEST_PROTOCOL)
+                else:
+                    with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'rb') as f_:
+                        FV_test_ = pickle.load(f_)
+
                 scores_ = GB_.perform_testing(FV_test_, opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores', duration=utter_dur_)
-                metrics_ = GB_.evaluate_performance(scores_, opDir=CFG['OUTPUT_DIR'])
                 with open(res_fName, 'wb') as f_:
-                    pickle.dump({'scores':scores_, 'metrics':metrics_}, f_, pickle.HIGHEST_PROTOCOL)
+                    pickle.dump({'scores':scores_}, f_, pickle.HIGHEST_PROTOCOL)
             else:
                 with open(res_fName, 'rb') as f_:
                     scores_ = pickle.load(f_)['scores']
-                    metrics_ = pickle.load(f_)['metrics']
+
+            metrics_ = GB_.evaluate_performance(scores_)
+            roc_opFile = CFG['FIG_DIR'] + '/ROC_' + str(utter_dur_) + 's.png'
+            PerformanceMetrics().plot_roc(metrics_['fpr'], metrics_['tpr'], roc_opFile)
                 
             print(f'Utterance duration: {utter_dur_}s:\n__________________________________________')
             print(f"\tAccuracy: {np.round(metrics_['accuracy'],4)}")
-            print(f"\tPrecision: {np.round(np.mean(metrics_['precision']),4)}")
-            print(f"\tRecall: {np.round(np.mean(metrics_['recall']),4)}")
-            print(f"\tF1-score: {np.round(np.mean(metrics_['f1-score']),4)}")
+            print(f"\tMacro Average Precision: {np.round(metrics_['precision'],4)}")
+            print(f"\tMacro Average Recall: {np.round(metrics_['recall'],4)}")
+            print(f"\tMacro Average F1-score: {np.round(metrics_['f1-score'],4)}")
             print(f"\tEER: {np.round(np.mean(metrics_['eer']),4)}")
+            with open(CFG['OUTPUT_DIR']+'/Performance.txt', 'a+') as f_:
+                f_.write(f'Utterance duration: {utter_dur_}s:\n__________________________________________\n')
+                f_.write(f"\tAccuracy: {np.round(metrics_['accuracy'],4)}\n")
+                f_.write(f"\tMacro Average Precision: {np.round(metrics_['precision'],4)}\n")
+                f_.write(f"\tMacro Average Recall: {np.round(metrics_['recall'],4)}\n")
+                f_.write(f"\tMacro Average F1-score: {np.round(metrics_['f1-score'],4)}\n")
+                f_.write(f"\tEER: {np.round(np.mean(metrics_['eer']),4)}\n\n")
+                
                 

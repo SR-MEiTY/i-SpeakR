@@ -258,7 +258,7 @@ class GaussianBackground:
         return Scores_
     
     
-    def evaluate_performance(self, res, opDir):
+    def evaluate_performance(self, res):
         '''
         Compute performance metrics.
 
@@ -266,8 +266,6 @@ class GaussianBackground:
         ----------
         res : dict
             Dictionary containing the sub-utterance wise scores.
-        opDir : str
-            Output directory path.
 
         Returns
         -------
@@ -284,15 +282,15 @@ class GaussianBackground:
         for split_id_ in res.keys():
             true_speaker_id_ = res[split_id_]['speaker_id']
             pred_speaker_id_ = res[split_id_]['matched_speaker']
-            true_label_ = np.squeeze(np.where(all_speaker_id_==true_speaker_id_))
+            true_label_ = np.squeeze(np.where(np.array(all_speaker_id_)==str(true_speaker_id_)))
             groundtruth_label_.append(true_label_)
-            ptd_labels_.append(np.squeeze(np.where(all_speaker_id_==pred_speaker_id_)))
+            ptd_labels_.append(np.squeeze(np.where(np.array(all_speaker_id_)==str(pred_speaker_id_))))
             gt_score_ = np.zeros((1,np.size(all_speaker_id_)))
-            gt_score_[true_label_] = 1
+            gt_score_[0,true_label_] = 1
             ptd_scores_ = np.zeros((1,np.size(all_speaker_id_)))
             for speaker_id_ in res[split_id_]['enr_speaker_scores'].keys():
-                lab_ = np.squeeze(np.where(all_speaker_id_==speaker_id_))
-                ptd_scores_[lab_] = res[split_id_]['enr_speaker_scores'][speaker_id_]
+                lab_ = np.squeeze(np.where(np.array(all_speaker_id_)==str(speaker_id_)))
+                ptd_scores_[0,lab_] = res[split_id_]['enr_speaker_scores'][speaker_id_]
             if np.size(groundtruth_scores_)<=1:
                 groundtruth_scores_ = gt_score_
                 predicted_scores_ = ptd_scores_
@@ -300,13 +298,12 @@ class GaussianBackground:
                 groundtruth_scores_ = np.append(groundtruth_scores_, gt_score_, axis=0)
                 predicted_scores_ = np.append(predicted_scores_, ptd_scores_, axis=0)
         
-        confmat_, precision_, recall_, fscore_ = PerformanceMetrics().compute_identification_performance(groundtruth_label_, ptd_labels_, labels=list(range(np.size(all_speaker_id_))))
+        label_list = list(range(np.size(all_speaker_id_)))
+        confmat_, precision_, recall_, fscore_ = PerformanceMetrics().compute_identification_performance(groundtruth_label_, ptd_labels_, label_list)
         acc_ = np.sum(np.diag(confmat_))/np.sum(confmat_)
 
         FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(groundtruth_scores_.flatten(), predicted_scores_.flatten())
-        
-        PerformanceMetrics().plot_roc(FPR_, TPR_, opDir)
-        
+                
         Metrics_ = {
             'accuracy': acc_,
             'precision': precision_,

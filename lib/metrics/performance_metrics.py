@@ -17,7 +17,7 @@ class PerformanceMetrics:
     def __init__(self):
         return
 
-    def compute_eer(groundtruth, scores):
+    def compute_eer(self, groundtruth, scores):
         '''
         Compute the Equal Error Rate.
 
@@ -47,7 +47,7 @@ class PerformanceMetrics:
         return fpr_, tpr_, eer_, eer_threshold_
     
     
-    def compute_identification_performance(groundtruth, ptd_labels, labels):
+    def compute_identification_performance(self, groundtruth, ptd_labels, labels):
         '''
         Compute the speaker identification performance.
 
@@ -73,18 +73,34 @@ class PerformanceMetrics:
 
         '''
         ConfMat = confusion_matrix(y_true=groundtruth, y_pred=ptd_labels)
-        precision, recall, fscore, support = precision_recall_fscore_support(y_true=groundtruth, y_pred=ptd_labels, labels=labels)
+        precision, recall, fscore, support = precision_recall_fscore_support(y_true=groundtruth, y_pred=ptd_labels, labels=labels, average='macro', zero_division=0)
         
         return ConfMat, precision, recall, fscore
     
     
-    def plot_roc(fpr, tpr, opDir):
-        fig_path = opDir + '/figures/'
-        if not os.path.exists(fig_path):
-            os.makedirs(fig_path)
-        plt.plot(tpr, fpr)
+    def plot_roc(self, fpr, tpr, opFile):
+        '''
+        Plot the Reciever Operating Characteristics (ROC) curve.
+
+        Parameters
+        ----------
+        fpr : 1D array
+            False Positive Rate.
+        tpr : 1D array
+            True Positive Rate.
+        opFile : str
+            Path to save the figure.
+
+        Returns
+        -------
+        None.
+
+        '''
+        plt.plot(fpr, tpr)
         plt.title('ROC')
-        plt.savefig(fig_path+'/ROC.png')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.savefig(opFile)
         
         return
         
