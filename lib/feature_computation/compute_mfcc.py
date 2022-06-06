@@ -107,7 +107,7 @@ class MFCC:
             feature_details_[data_type_] = {}
             utter_count_ = 0
             for utterance_id_ in meta_info[data_type_].keys():
-                print(f'{data_type_}\t{utterance_id_}\t({utter_count_}/{len(meta_info[data_type_].keys())}):')
+                # print(f'{data_type_}\t{utterance_id_}\t({utter_count_}/{len(meta_info[data_type_].keys())}):')
                 fName_ = meta_info[data_type_][utterance_id_]['wav_path'].split('/')[-1]
                 data_path_ = base_path + '/' + meta_info[data_type_][utterance_id_]['wav_path']
                 
@@ -146,7 +146,7 @@ class MFCC:
                             }
                         # Check if feature file already exists
                         if os.path.exists(opFile_):
-                            print(f'\t{split_id_} feature available')
+                            # print(f'\t{split_id_} feature available')
                             continue
                         
                         if not 'Xin_' in locals(): # Check if the wav has already been loaded

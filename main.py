@@ -260,15 +260,19 @@ if __name__ == '__main__':
         '''
         Training the GMM-UBM model
         '''
-        dev_key_ = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
-        if not os.path.exists(CFG['OUTPUT_DIR']+'/DEV_Data.pkl'):
-            FV_dev_ = LoadFeatures(info=feat_info_[dev_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
-            # with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'wb') as f_:
-            #     pickle.dump(FV_dev_, f_, pickle.HIGHEST_PROTOCOL)
+        ubm_fName = CFG['MODEL_DIR'] + '/ubm.pkl'
+        if not os.path.exists(ubm_fName):
+            dev_key_ = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
+            if not os.path.exists(CFG['OUTPUT_DIR']+'/DEV_Data.pkl'):
+                FV_dev_ = LoadFeatures(info=feat_info_[dev_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
+                # with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'wb') as f_:
+                #     pickle.dump(FV_dev_, f_, pickle.HIGHEST_PROTOCOL)
+            else:
+                with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'rb') as f_:
+                    FV_dev_ = pickle.load(f_)
+            GB_.train_ubm(FV_dev_, cov_type='full')
         else:
-            with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'rb') as f_:
-                FV_dev_ = pickle.load(f_)
-        GB_.train_ubm(FV_dev_)
+            print('The GMM-UBM is already available')
         
         
         ''' 
@@ -282,7 +286,7 @@ if __name__ == '__main__':
         else:
             with open(CFG['OUTPUT_DIR']+'/ENR_Data.pkl', 'rb') as f_:
                 FV_enr_ = pickle.load(f_)
-        GB_.speaker_adaptation(FV_enr_, use_adapt_w_cov=False)
+        GB_.speaker_adaptation(FV_enr_, cov_type='full', use_adapt_w_cov=False)
         
             
         ''' 
@@ -291,20 +295,21 @@ if __name__ == '__main__':
         for utter_dur_ in CFG['TEST_CHOP']:
             res_fName = CFG['OUTPUT_DIR']+'/Result_'+str(utter_dur_)+'s.pkl'
             if not os.path.exists(res_fName):
-                
                 ''' 
                 Testing the trained models 
                 '''
                 test_key_ = list(filter(None, [key if key.startswith('TEST') else '' for key in feat_info_.keys()]))
-                if not os.path.exists(CFG['OUTPUT_DIR']+'/TEST_Data.pkl'):
-                    FV_test_ = LoadFeatures(info=feat_info_[test_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
-                    # with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'wb') as f_:
-                    #     pickle.dump(FV_test_, f_, pickle.HIGHEST_PROTOCOL)
-                else:
-                    with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'rb') as f_:
-                        FV_test_ = pickle.load(f_)
+                # if not os.path.exists(CFG['OUTPUT_DIR']+'/TEST_Data.pkl'):
+                #     FV_test_ = LoadFeatures(info=feat_info_[test_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
+                #     # with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'wb') as f_:
+                #     #     pickle.dump(FV_test_, f_, pickle.HIGHEST_PROTOCOL)
+                # else:
+                #     with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'rb') as f_:
+                #         FV_test_ = pickle.load(f_)
 
-                scores_ = GB_.perform_testing(FV_test_, opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores', duration=utter_dur_)
+                # scores_ = GB_.perform_testing(opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores', X_TEST=FV_test_, duration=utter_dur_)
+
+                scores_ = GB_.perform_testing(opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores', feat_info=feat_info_[test_key_[0]], duration=utter_dur_)
                 with open(res_fName, 'wb') as f_:
                     pickle.dump({'scores':scores_}, f_, pickle.HIGHEST_PROTOCOL)
             else:

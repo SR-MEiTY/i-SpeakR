@@ -57,14 +57,14 @@ class LoadFeatures:
             if speaker_id_ not in feature_vectors_.keys():
                 feature_vectors_[speaker_id_] = {}
             feature_path_ = self.INFO[split_id_]['file_path']
-            fv = np.load(feature_path_, allow_pickle=True)
+            fv_ = np.load(feature_path_, allow_pickle=True)
             # The feature vectors must be stored as individual rows in the 2D array
             if dim:
-                if np.shape(fv)[0]==dim:
-                    fv = fv.T
-            elif np.shape(fv)[1]>np.shape(fv)[0]:
-                fv = fv.T
-            feature_vectors_[speaker_id_][split_id_] = np.array(fv, ndmin=2)
+                if np.shape(fv_)[0]==dim:
+                    fv_ = fv_.T
+            elif np.shape(fv_)[1]>np.shape(fv_)[0]:
+                fv_ = fv_.T
+            feature_vectors_[speaker_id_][split_id_] = np.array(fv_, ndmin=2)
                         
         return feature_vectors_            
         

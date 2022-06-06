@@ -131,7 +131,7 @@ class ChopUtterances:
             utter_count = 0
             for utterance_id_ in meta_info[data_type_].keys():
                 utter_count += 1
-                print(f'{data_type_} {utterance_id_} ({utter_count}/{len(meta_info[data_type_].keys())})')
+                # print(f'{data_type_} {utterance_id_} ({utter_count}/{len(meta_info[data_type_].keys())})')
                 fName_ = meta_info[data_type_][utterance_id_]['wav_path'].split('/')[-1]
                 data_path_ = path + '/' + meta_info[data_type_][utterance_id_]['wav_path']
                 if not os.path.exists(data_path_):
@@ -144,7 +144,7 @@ class ChopUtterances:
                     os.makedirs(opDir_path_)
                 opFile_ = opDir_path_ + '/' + fName_.split('.')[0] + '.csv'
                 if os.path.exists(opFile_):
-                    print(f'\t{fName_} chopping details already stored')
+                    # print(f'\t{fName_} chopping details already stored')
                     continue
                 
                 nonsil_intervals_, nSamples_ = self.get_non_silence_intervals(data_path_)

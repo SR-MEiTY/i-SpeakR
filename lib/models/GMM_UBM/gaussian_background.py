@@ -13,6 +13,8 @@ import os
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from lib.metrics.performance_metrics import PerformanceMetrics
+import psutil
+import sys
 
 
 class GaussianBackground:
@@ -51,32 +53,34 @@ class GaussianBackground:
         None.
 
         '''
+        X_combined_ = np.empty([], dtype=np.float32)
+        for speaker_id_ in X.keys():
+            for split_id_ in X[speaker_id_].keys():
+                if np.size(X_combined_)<=1:
+                    X_combined_ = X[speaker_id_][split_id_]
+                else:
+                    X_combined_ = np.append(X_combined_, X[speaker_id_][split_id_], axis=0)
+        print(f'X_combined={np.shape(X_combined_)}')
+        ram_mem_avail_ = psutil.virtual_memory().available
+        feat_memsize_ = sys.getsizeof(X_combined_)
+        print(f'ram_mem_avail_={ram_mem_avail_} feat_memsize_={feat_memsize_} ratio={np.round(feat_memsize_/ram_mem_avail_,4)}')
+        random_sample_idx_ = np.random.choice(list(range(np.shape(X_combined_)[0])), size=10000, replace=False)
+        X_combined_ = X_combined_[random_sample_idx_, :]
+        
+        ''' Feature Scaling '''
+        if self.FEATURE_SCALING==1:
+            self.SCALER = StandardScaler(with_mean=True, with_std=False).fit(X_combined_)
+            X_combined_ = self.SCALER.transform(X_combined_)
+        elif self.FEATURE_SCALING==2:
+            self.SCALER = StandardScaler(with_mean=True, with_std=True).fit(X_combined_)
+            X_combined_ = self.SCALER.transform(X_combined_)
+        
+        self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose)
+        self.BACKGROUND_MODEL.fit(X_combined_)
+        
         ubm_fName = self.MODEL_DIR + '/ubm.pkl'
-        if not os.path.exists(ubm_fName):
-            X_combined_ = np.empty([], dtype=np.float32)
-            for speaker_id_ in X.keys():
-                for split_id_ in X[speaker_id_].keys():
-                    if np.size(X_combined_)<=1:
-                        X_combined_ = X[speaker_id_][split_id_]
-                    else:
-                        X_combined_ = np.append(X_combined_, X[speaker_id_][split_id_], axis=0)
-            print(f'X_combined={np.shape(X_combined_)}')
-            
-            ''' Feature Scaling '''
-            if self.FEATURE_SCALING==1:
-                self.SCALER = StandardScaler(with_mean=True, with_std=False).fit(X_combined_)
-                X_combined_ = self.SCALER.transform(X_combined_)
-            elif self.FEATURE_SCALING==2:
-                self.SCALER = StandardScaler(with_mean=True, with_std=True).fit(X_combined_)
-                X_combined_ = self.SCALER.transform(X_combined_)
-            
-            self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose)
-            self.BACKGROUND_MODEL.fit(X_combined_)
-            
-            with open(ubm_fName, 'wb') as f:
-                pickle.dump(self.BACKGROUND_MODEL, f, pickle.HIGHEST_PROTOCOL)
-        else:
-            print('The GMM Universal Background Model is already available')
+        with open(ubm_fName, 'wb') as f:
+            pickle.dump(self.BACKGROUND_MODEL, f, pickle.HIGHEST_PROTOCOL)
         
         return
     
@@ -108,6 +112,7 @@ class GaussianBackground:
             with open(ubm_fName_, 'rb') as f_:
                 self.BACKGROUND_MODEL = pickle.load(f_)
         
+
         # print(f'{X_ENR.keys()}')
         for speaker_id_ in X_ENR.keys():
             speaker_opDir_ = self.MODEL_DIR + '/' + speaker_id_ + '/'
@@ -145,18 +150,22 @@ class GaussianBackground:
             print(f'Adapted GMM model saved for speaker={speaker_id_}')
             
             
-    def perform_testing(self, X_TEST, opDir, opFileName, duration=None):
+    def perform_testing(self, opDir, opFileName, X_TEST=None, feat_info=None, dim=39, duration=None):
         '''
         Compute test speaker scores against all enrollment speaker models.
 
         Parameters
         ----------
-        X_TEST : dict
-            Dictionary containing the speaker-wise test data.
         opDir : str
             Output path.
         opFileName : str
             Output file name.
+        X_TEST : dict, optional
+            Dictionary containing the speaker-wise test data.
+        feat_info : dict, optional
+            Dictionary containing info about feature paths.
+        dim : int, optional
+            Dimension of input feature.
         duration : str, optional
             Selection of which utterance duration to test. Default, tests all
             utterances.
@@ -183,8 +192,6 @@ class GaussianBackground:
     
             enrolled_speakers_ = next(os.walk(self.MODEL_DIR))[1]
             Scores_ = {}
-            speaker_count_ = 0
-            num_speakers_ = len(X_TEST.keys())
             true_lab_ = []
             pred_lab_ = []
 
@@ -200,54 +207,117 @@ class GaussianBackground:
                 with open(enr_speaker_model_fName_, 'rb') as f_:
                     enr_speaker_model_[enr_j_] = pickle.load(f_)
 
-
-            ''' Testing each sub-utterance with each speaker model '''
-            for speaker_id_i_ in X_TEST.keys():
-                speaker_count_ += 1
+            
+            if not X_TEST:
+                ''' 
+                Testing every test utterance one by one 
+                '''
                 split_count_ = 0
-                num_splits_ = len(X_TEST[speaker_id_i_].keys())
-                for split_id_ in X_TEST[speaker_id_i_].keys():
+                for split_id_ in feat_info.keys():
                     split_count_ += 1
+                    '''
+                    Checking duration of utterance
+                    '''
                     if duration:
                         if not split_id_.split('_')[-2]==str(duration):
                             continue
-                    
+    
+                    speaker_id_ = feat_info[split_id_]['speaker_id']
+                    feature_path_ = feat_info[split_id_]['file_path']
                     fv_ = None
                     del fv_
-                    fv_ = X_TEST[speaker_id_i_][split_id_]
-                
+                    fv_ = np.load(feature_path_, allow_pickle=True)
+                    # The feature vectors must be stored as individual rows in the 2D array
+                    if dim:
+                        if np.shape(fv_)[0]==dim:
+                            fv_ = fv_.T
+                    elif np.shape(fv_)[1]>np.shape(fv_)[0]:
+                        fv_ = fv_.T
+    
                     ''' Feature Scaling '''
                     if self.FEATURE_SCALING==1:
                         fv_ = self.SCALER.transform(fv_)
                     elif self.FEATURE_SCALING==2:
                         fv_ = self.SCALER.transform(fv_)
                         
+                    all_enr_speaker_scores_ = None
+                    del all_enr_speaker_scores_
                     all_enr_speaker_scores_ = {}
+                    max_score_ = None
+                    del max_score_
                     max_score_ = -9999999
                     matched_speaker_id_ = ''
-                    for enr_j_ in enrolled_speakers_:
-                        # enr_speaker_opDir_ = self.MODEL_DIR + '/' + enr_j_ + '/'
-                        # enr_speaker_model_fName_ = enr_speaker_opDir_ + '/adapted_ubm.pkl'
-                        # if not os.path.exists(enr_speaker_model_fName_):
-                        #     print(f'GMM model does not exist for speaker={enr_j_}')
-                        #     continue
-                        # enr_speaker_model_ = None
-                        # with open(enr_speaker_model_fName_, 'rb') as f_:
-                        #     enr_speaker_model_ = pickle.load(f_)
-                        
+                    for enr_j_ in enr_speaker_model_:                        
                         all_enr_speaker_scores_[enr_j_] = enr_speaker_model_[enr_j_].score(fv_) - self.BACKGROUND_MODEL.score(fv_)
                         if all_enr_speaker_scores_[enr_j_]>max_score_:
                             max_score_ = all_enr_speaker_scores_[enr_j_]
                             matched_speaker_id_ = enr_j_
-                    Scores_[split_id_] = {'speaker_id':speaker_id_i_, 'enr_speaker_scores': all_enr_speaker_scores_, 'matched_speaker':matched_speaker_id_}
+                    Scores_[split_id_] = {
+                        'speaker_id':speaker_id_, 
+                        'enr_speaker_scores': all_enr_speaker_scores_, 
+                        'matched_speaker':matched_speaker_id_,
+                        }
                     
                     ''' Displaying progress '''
-                    lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_i_)))
-                    lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
-                    true_lab_.append(lab_true_)
-                    pred_lab_.append(lab_pred_)
+                    # lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_)))
+                    # lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
+                    # true_lab_.append(lab_true_)
+                    # pred_lab_.append(lab_pred_)
+                    true_lab_.append(str(speaker_id_))
+                    pred_lab_.append(str(matched_speaker_id_))
                     accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
-                    print(f'\t{split_id_} speakers=({speaker_count_}/{num_speakers_}) splits=({split_count_}/{num_splits_}) true={speaker_id_i_} ({lab_true_}) pred={matched_speaker_id_} ({lab_pred_}) max score={np.round(max_score_,4)} accuracy={accuracy_}%')
+                    # print(f'\t{split_id_} splits=({split_count_}/{len(feat_info)}) true=({speaker_id_}|{lab_true_}) pred=({matched_speaker_id_}|{lab_pred_}) max score={np.round(max_score_,4)} accuracy={accuracy_}%')
+                    print(f'\t{split_id_} splits=({split_count_}/{len(feat_info)}) true=({speaker_id_}) pred=({matched_speaker_id_}) max score={np.round(max_score_,4)} accuracy={accuracy_}%')
+
+
+            if not feat_info:
+                ''' 
+                Testing each sub-utterance with each speaker model 
+                '''
+                speaker_count_ = 0
+                num_speakers_ = len(X_TEST.keys())
+
+                for speaker_id_i_ in X_TEST.keys():
+                    speaker_count_ += 1
+                    split_count_ = 0
+                    num_splits_ = len(X_TEST[speaker_id_i_].keys())
+                    for split_id_ in X_TEST[speaker_id_i_].keys():
+                        split_count_ += 1
+                        
+                        '''
+                        Checking duration of utterance
+                        '''
+                        if duration:
+                            if not split_id_.split('_')[-2]==str(duration):
+                                continue
+                        
+                        fv_ = None
+                        del fv_
+                        fv_ = X_TEST[speaker_id_i_][split_id_]
+                    
+                        ''' Feature Scaling '''
+                        if self.FEATURE_SCALING==1:
+                            fv_ = self.SCALER.transform(fv_)
+                        elif self.FEATURE_SCALING==2:
+                            fv_ = self.SCALER.transform(fv_)
+                            
+                        all_enr_speaker_scores_ = {}
+                        max_score_ = -9999999
+                        matched_speaker_id_ = ''
+                        for enr_j_ in enr_speaker_model_:                        
+                            all_enr_speaker_scores_[enr_j_] = enr_speaker_model_[enr_j_].score(fv_) #- self.BACKGROUND_MODEL.score(fv_)
+                            if all_enr_speaker_scores_[enr_j_]>max_score_:
+                                max_score_ = all_enr_speaker_scores_[enr_j_]
+                                matched_speaker_id_ = enr_j_
+                        Scores_[split_id_] = {'speaker_id':speaker_id_i_, 'enr_speaker_scores': all_enr_speaker_scores_, 'matched_speaker':matched_speaker_id_}
+                        
+                        ''' Displaying progress '''
+                        lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_i_)))
+                        lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
+                        true_lab_.append(lab_true_)
+                        pred_lab_.append(lab_pred_)
+                        accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
+                        print(f'\t{split_id_} speakers=({speaker_count_}/{num_speakers_}) splits=({split_count_}/{num_splits_}) true={speaker_id_i_} ({lab_true_}) pred={matched_speaker_id_} ({lab_pred_}) max score={np.round(max_score_,4)} accuracy={accuracy_}%')
 
             with open(score_fName_, 'wb') as f_:
                 pickle.dump(Scores_, f_, pickle.HIGHEST_PROTOCOL)
