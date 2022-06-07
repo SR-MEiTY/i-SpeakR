@@ -10,11 +10,11 @@ import numpy as np
 from lib.models.GMM_UBM.speaker_adaptation import SpeakerAdaptation
 import pickle
 import os
-from sklearn.cluster import KMeans
+# from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from lib.metrics.performance_metrics import PerformanceMetrics
 import psutil
-import sys
+# import sys
 
 
 class GaussianBackground:
@@ -23,12 +23,14 @@ class GaussianBackground:
     BACKGROUND_MODEL = None
     FEATURE_SCALING = 0
     SCALER = None
+    N_BATCHES = 0
     
     
-    def __init__(self, model_dir, num_mixtures=128, feat_scaling=0):
+    def __init__(self, model_dir, num_mixtures=128, feat_scaling=0, n_batches=100):
         self.NCOMP = num_mixtures
         self.MODEL_DIR = model_dir
         self.FEATURE_SCALING = feat_scaling
+        self.N_BATCHES = n_batches
     
     
     def train_ubm(self, X, cov_type='diag', max_iterations=100, num_init=3, verbose=1):
@@ -61,12 +63,7 @@ class GaussianBackground:
                 else:
                     X_combined_ = np.append(X_combined_, X[speaker_id_][split_id_], axis=0)
         print(f'X_combined={np.shape(X_combined_)}')
-        ram_mem_avail_ = psutil.virtual_memory().available
-        feat_memsize_ = sys.getsizeof(X_combined_)
-        print(f'ram_mem_avail_={ram_mem_avail_} feat_memsize_={feat_memsize_} ratio={np.round(feat_memsize_/ram_mem_avail_,4)}')
-        random_sample_idx_ = np.random.choice(list(range(np.shape(X_combined_)[0])), size=10000, replace=False)
-        X_combined_ = X_combined_[random_sample_idx_, :]
-        
+
         ''' Feature Scaling '''
         if self.FEATURE_SCALING==1:
             self.SCALER = StandardScaler(with_mean=True, with_std=False).fit(X_combined_)
@@ -75,12 +72,41 @@ class GaussianBackground:
             self.SCALER = StandardScaler(with_mean=True, with_std=True).fit(X_combined_)
             X_combined_ = self.SCALER.transform(X_combined_)
         
-        self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose)
-        self.BACKGROUND_MODEL.fit(X_combined_)
+        ram_mem_avail_ = psutil.virtual_memory().available >> 20 # in MB; >> 30 in GB
+        # feat_memsize_ = sys.getsizeof(X_combined_) >> 20 # in MB; >> 30 in GB
+        calculated_var_size_ = np.shape(X_combined_)[0]*np.shape(X_combined_)[1]*self.NCOMP*4 >> 20
+        print(f'Available RAM: {ram_mem_avail_}')
+        print(f'Feature memory size: {calculated_var_size_}')
+
+        if calculated_var_size_>ram_mem_avail_:
+            print('Training GMM-UBM in a batch-wise manner')
+            
+            for batch_i_ in range(self.N_BATCHES):
+                batch_size_ = int(np.shape(X_combined_)[0]/self.N_BATCHES)
+                random_sample_idx_ = np.random.choice(list(range(np.shape(X_combined_)[0])), size=batch_size_, replace=False)
+                X_combined_batch_ = X_combined_[random_sample_idx_, :]
+                if batch_i_==0:
+                    self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose)
+                    self.BACKGROUND_MODEL.fit(X_combined_batch_)
+                    print(f'Batch: {batch_i_+1} model trained')
+                else:
+                    adapt_ = None
+                    del adapt_
+                    adapt_ = SpeakerAdaptation().adapt_ubm(X_combined_batch_.T, self.BACKGROUND_MODEL, use_adapt_w_cov=False)
+                    self.BACKGROUND_MODEL.means_ = adapt_['means']
+                    self.BACKGROUND_MODEL.weights_ = adapt_['weights']
+                    self.BACKGROUND_MODEL.covariances_ = adapt_['covariances']
+                    self.BACKGROUND_MODEL.precisions_ = adapt_['precisions']
+                    self.BACKGROUND_MODEL.precisions_cholesky_ = adapt_['precisions_cholesky']
+                    print(f'Batch: {batch_i_+1} model updated')
+        
+        else:
+            self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose)
+            self.BACKGROUND_MODEL.fit(X_combined_)
         
         ubm_fName = self.MODEL_DIR + '/ubm.pkl'
         with open(ubm_fName, 'wb') as f:
-            pickle.dump(self.BACKGROUND_MODEL, f, pickle.HIGHEST_PROTOCOL)
+            pickle.dump({'model':self.BACKGROUND_MODEL, 'scaler':self.SCALER}, f, pickle.HIGHEST_PROTOCOL)
         
         return
     
@@ -109,8 +135,13 @@ class GaussianBackground:
             if not os.path.exists(ubm_fName_):
                 print('Background model does not exist')
                 return
-            with open(ubm_fName_, 'rb') as f_:
-                self.BACKGROUND_MODEL = pickle.load(f_)
+            try:
+                with open(ubm_fName_, 'rb') as f_:
+                    self.BACKGROUND_MODEL = pickle.load(f_)['model']
+                    self.SCALER = pickle.load(f_)['scaler']
+            except:
+                with open(ubm_fName_, 'rb') as f_:
+                    self.BACKGROUND_MODEL = pickle.load(f_)
         
 
         # print(f'{X_ENR.keys()}')
@@ -187,8 +218,13 @@ class GaussianBackground:
                 if not os.path.exists(ubm_fName_):
                     print('Background model does not exist')
                     return
-                with open(ubm_fName_, 'rb') as f_:
-                    self.BACKGROUND_MODEL = pickle.load(f_)
+                try:
+                    with open(ubm_fName_, 'rb') as f_:
+                        self.BACKGROUND_MODEL = pickle.load(f_)['model']
+                        self.SCALER = pickle.load(f_)['scaler']
+                except:
+                    with open(ubm_fName_, 'rb') as f_:
+                        self.BACKGROUND_MODEL = pickle.load(f_)
     
             enrolled_speakers_ = next(os.walk(self.MODEL_DIR))[1]
             Scores_ = {}
@@ -198,6 +234,7 @@ class GaussianBackground:
             
             ''' Loading the speaker models '''
             enr_speaker_model_ = {}
+            index_ = 0
             for enr_j_ in enrolled_speakers_:
                 enr_speaker_opDir_ = self.MODEL_DIR + '/' + enr_j_ + '/'
                 enr_speaker_model_fName_ = enr_speaker_opDir_ + '/adapted_ubm.pkl'
@@ -205,11 +242,14 @@ class GaussianBackground:
                     print(f'GMM model does not exist for speaker={enr_j_}')
                     continue
                 with open(enr_speaker_model_fName_, 'rb') as f_:
-                    enr_speaker_model_[enr_j_] = pickle.load(f_)
-
+                    enr_speaker_model_[index_] = {'speaker_id':enr_j_, 'model':pickle.load(f_)}
+                index_ += 1
+                    
+            confusion_matrix_ = np.zeros((len(enr_speaker_model_), len(enr_speaker_model_)))
+            match_count_ = np.zeros(len(enrolled_speakers_))
             
             if not X_TEST:
-                ''' 
+                '''
                 Testing every test utterance one by one 
                 '''
                 split_count_ = 0
@@ -242,32 +282,37 @@ class GaussianBackground:
                         
                     all_enr_speaker_scores_ = None
                     del all_enr_speaker_scores_
-                    all_enr_speaker_scores_ = {}
-                    max_score_ = None
-                    del max_score_
-                    max_score_ = -9999999
+                    all_enr_speaker_scores_ = np.zeros(len(enr_speaker_model_))
                     matched_speaker_id_ = ''
-                    for enr_j_ in enr_speaker_model_:                        
-                        all_enr_speaker_scores_[enr_j_] = enr_speaker_model_[enr_j_].score(fv_) - self.BACKGROUND_MODEL.score(fv_)
-                        if all_enr_speaker_scores_[enr_j_]>max_score_:
-                            max_score_ = all_enr_speaker_scores_[enr_j_]
-                            matched_speaker_id_ = enr_j_
+                    background_model_scores_ = np.array(self.BACKGROUND_MODEL.score_samples(fv_))
+                    for index_i_ in enr_speaker_model_.keys():
+                        speaker_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
+                        all_enr_speaker_scores_[index_i_] = np.mean(np.subtract(speaker_model_scores_,  background_model_scores_))
+                    map_idx_ = np.argmax(all_enr_speaker_scores_)
+                    matched_speaker_id_ = enr_speaker_model_[map_idx_]['speaker_id']
+                    match_count_[map_idx_] += 1
+                    print(f'match_count_={match_count_}')
+                    
                     Scores_[split_id_] = {
+                        'index': map_idx_,
                         'speaker_id':speaker_id_, 
                         'enr_speaker_scores': all_enr_speaker_scores_, 
                         'matched_speaker':matched_speaker_id_,
                         }
                     
-                    ''' Displaying progress '''
-                    # lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_)))
-                    # lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
-                    # true_lab_.append(lab_true_)
-                    # pred_lab_.append(lab_pred_)
+                    '''
+                    Displaying progress
+                    '''
+                    lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_)))
+                    lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
+                    confusion_matrix_[lab_true_, lab_pred_] += 1
+
                     true_lab_.append(str(speaker_id_))
                     pred_lab_.append(str(matched_speaker_id_))
                     accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
-                    # print(f'\t{split_id_} splits=({split_count_}/{len(feat_info)}) true=({speaker_id_}|{lab_true_}) pred=({matched_speaker_id_}|{lab_pred_}) max score={np.round(max_score_,4)} accuracy={accuracy_}%')
-                    print(f'\t{split_id_} splits=({split_count_}/{len(feat_info)}) true=({speaker_id_}) pred=({matched_speaker_id_}) max score={np.round(max_score_,4)} accuracy={accuracy_}%')
+                    print(f'\t{split_id_} splits=({split_count_}/{len(feat_info)}) true=({speaker_id_}) pred=({matched_speaker_id_}) max score={np.round(all_enr_speaker_scores_[map_idx_],4)} accuracy={accuracy_}%')
+                    with open(self.MODEL_DIR+'/../../Confusion_Matrix.txt', 'w+') as f_:
+                        f_.write(f'{confusion_matrix_}')
 
 
             if not feat_info:
@@ -300,16 +345,22 @@ class GaussianBackground:
                             fv_ = self.SCALER.transform(fv_)
                         elif self.FEATURE_SCALING==2:
                             fv_ = self.SCALER.transform(fv_)
-                            
-                        all_enr_speaker_scores_ = {}
-                        max_score_ = -9999999
-                        matched_speaker_id_ = ''
-                        for enr_j_ in enr_speaker_model_:                        
-                            all_enr_speaker_scores_[enr_j_] = enr_speaker_model_[enr_j_].score(fv_) #- self.BACKGROUND_MODEL.score(fv_)
-                            if all_enr_speaker_scores_[enr_j_]>max_score_:
-                                max_score_ = all_enr_speaker_scores_[enr_j_]
-                                matched_speaker_id_ = enr_j_
-                        Scores_[split_id_] = {'speaker_id':speaker_id_i_, 'enr_speaker_scores': all_enr_speaker_scores_, 'matched_speaker':matched_speaker_id_}
+                        
+                        all_enr_speaker_scores_ = None
+                        del all_enr_speaker_scores_
+                        all_enr_speaker_scores_ = np.zeros(len(enr_speaker_model_))
+                        background_model_scores_ = np.array(self.BACKGROUND_MODEL.score_samples(fv_))
+                        for index_i_ in enr_speaker_model_.keys():
+                            speaker_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
+                            all_enr_speaker_scores_[index_i_] = np.mean(np.subtract(speaker_model_scores_, background_model_scores_))
+                        map_idx_ = np.argmax(all_enr_speaker_scores_)
+                        matched_speaker_id_ = enr_speaker_model_[map_idx_]['speaker_id']
+                        Scores_[split_id_] = {
+                            'index': map_idx_,
+                            'speaker_id':speaker_id_i_, 
+                            'enr_speaker_scores': all_enr_speaker_scores_,
+                            'matched_speaker':matched_speaker_id_,
+                            }
                         
                         ''' Displaying progress '''
                         lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_i_)))
@@ -317,7 +368,7 @@ class GaussianBackground:
                         true_lab_.append(lab_true_)
                         pred_lab_.append(lab_pred_)
                         accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
-                        print(f'\t{split_id_} speakers=({speaker_count_}/{num_speakers_}) splits=({split_count_}/{num_splits_}) true={speaker_id_i_} ({lab_true_}) pred={matched_speaker_id_} ({lab_pred_}) max score={np.round(max_score_,4)} accuracy={accuracy_}%')
+                        print(f'\t{split_id_} speakers=({speaker_count_}/{num_speakers_}) splits=({split_count_}/{num_splits_}) true={speaker_id_i_} ({lab_true_}) pred={matched_speaker_id_} ({lab_pred_}) max score={np.round(all_enr_speaker_scores_[map_idx_],4)} accuracy={accuracy_}%')
 
             with open(score_fName_, 'wb') as f_:
                 pickle.dump(Scores_, f_, pickle.HIGHEST_PROTOCOL)

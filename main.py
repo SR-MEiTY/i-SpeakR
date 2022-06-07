@@ -143,6 +143,8 @@ def get_configurations(args):
                                                                     # 2: mean and variance scaling
         'MODEL_TYPE': section['model'],                             # Parameter indicating which model to use
         'UBM_NCOMPONENTS': int(section['UBM_ncomp']),               # Number of Gaussian components for the UBM model
+        'COVARIANCE_TYPE': section['covariance_type'],              # Type of covariance: 'full', 'diag', 'tied'
+        'ADAPT_WEIGHT_COV': section.getboolean('adapt_weight_cov'), # Flag to indicate whether to adapt the weights and covariances of the speaker models
         }
 
     CFG['OUTPUT_DIR'] = args.output_path + '/i-SpeakR_output/' + args.data_path.split('/')[-2] + '_' + CFG['today'] + '/'
@@ -270,7 +272,7 @@ if __name__ == '__main__':
             else:
                 with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'rb') as f_:
                     FV_dev_ = pickle.load(f_)
-            GB_.train_ubm(FV_dev_, cov_type='full')
+            GB_.train_ubm(FV_dev_, cov_type=CFG['COVARIANCE_TYPE'])
         else:
             print('The GMM-UBM is already available')
         
@@ -286,13 +288,18 @@ if __name__ == '__main__':
         else:
             with open(CFG['OUTPUT_DIR']+'/ENR_Data.pkl', 'rb') as f_:
                 FV_enr_ = pickle.load(f_)
-        GB_.speaker_adaptation(FV_enr_, cov_type='full', use_adapt_w_cov=False)
+                
+        GB_.speaker_adaptation(
+            FV_enr_, 
+            cov_type=CFG['COVARIANCE_TYPE'], 
+            use_adapt_w_cov=CFG['ADAPT_WEIGHT_COV']
+            )
         
             
         ''' 
         Computing the performance metrics 
         '''
-        for utter_dur_ in CFG['TEST_CHOP']:
+        for utter_dur_ in [60]: # CFG['TEST_CHOP']:
             res_fName = CFG['OUTPUT_DIR']+'/Result_'+str(utter_dur_)+'s.pkl'
             if not os.path.exists(res_fName):
                 ''' 

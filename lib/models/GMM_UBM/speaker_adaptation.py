@@ -124,38 +124,38 @@ class SpeakerAdaptation:
         # The difference between 1.0 and the next smallest representable float larger 
         # than 1.0. For example, for 64-bit binary floats in the IEEE-754 standard, 
         # eps = 2**-52, approximately 2.22e-16.
-        eps = np.finfo(float).eps
+        eps_ = np.finfo(float).eps
         adapt = {}
     
-        mv = gmm_ubm.means_
-        dcov = gmm_ubm.covariances_
-        w = gmm_ubm.weights_
+        mv_ = gmm_ubm.means_ #ubm mean
+        dcov_ = gmm_ubm.covariances_ #ubm coveriance
+        w_ = gmm_ubm.weights_ # ubm weights
         
-        gamma = gmm_ubm.predict_proba(X.T) # responsibility factor (Eq 7)
+        gamma_ = gmm_ubm.predict_proba(X.T) # responsibility factor (Eq 7)
     
-        ni = np.sum(gamma,axis = 0) # zeroth order statistics (Eq 8)
-        ni = ((ni+eps)/(sum(ni)+ni.shape[0]*eps))*sum(ni) # to avoid divide by zero error
+        ni_ = np.sum(gamma_,axis = 0) # zeroth order statistics (Eq 8)
+        ni_ = ((ni_+eps_)/(sum(ni_)+ni_.shape[0]*eps_))*sum(ni_) # to avoid divide by zero error
         
-        Ex = ((X @ gamma)/ni).T # 1st order statistics (Eq 9)
+        ex_ = ((X @ gamma_)/ni_).T # 1st order statistics/ expected speaker specific mean (Eq 9)
         
-        Ex2 = ((np.square(X) @ gamma)/ni).T #2nd order statistics (Eq 10)
+        ex2_ = ((np.square(X) @ gamma_)/ni_).T #2nd order statistics/speaker specific second order moment (Eq 10)
     
-        alpha = ni/(ni+16) # relevence factor (Eq 14)
+        alpha_ = ni_/(ni_+16) # relevence factor (Eq 14)
     
-        w_temp = ((alpha*ni)/X.shape[1])+(w)*(1-alpha) # (Eq 11)
+        w_temp_ = ((alpha_*ni_)/X.shape[1])+(w_)*(1-alpha_) # (Eq 11)
         
-        temp_alpha = np.tile(alpha,(Ex.shape[1],1)).T
-        temp_alpha_c = np.tile((1-alpha),(Ex.shape[1],1)).T
+        temp_alpha_ = np.tile(alpha_,(ex_.shape[1],1)).T   # alpha_i
+        temp_alpha_c_ = np.tile((1-alpha_),(ex_.shape[1],1)).T # (1-alpha)
     
         if use_adapt_w_cov:
             # print(w_temp/sum(w_temp))
-            adapt['weights'] = w_temp/sum(w_temp)   # updated weight (Eq 11)
-            adapt['means'] = (Ex*temp_alpha+mv*temp_alpha_c) #updated mean (Eq 12)
-            adapt['covariances'] = (Ex2*temp_alpha+(dcov+np.square(mv))*temp_alpha_c)-np.square(adapt['means']) # updated covariance (Eq 13)
+            adapt['weights'] = w_temp_/sum(w_temp_)   # updated weight (Eq 11)
+            adapt['means'] = (ex_*temp_alpha_+mv_*temp_alpha_c_) #updated mean (Eq 12)
+            adapt['covariances'] = (ex2_*temp_alpha_+(dcov_+np.square(mv_))*temp_alpha_c_)-np.square(adapt['means']) # updated covariance (Eq 13)
         else:
-            adapt['means'] = (Ex*temp_alpha+mv*temp_alpha_c) #updated mean (Eq 12)
-            adapt['weights'] = w
-            adapt['covariances'] = dcov
+            adapt['means'] = (ex_*temp_alpha_+mv_*temp_alpha_c_)  #updated mean (Eq 12)
+            adapt['weights'] = w_   # ubm weights are assigned to adapt model
+            adapt['covariances'] = dcov_ # ubm covarinace is assigned to adapt model
         
         adapt['precisions_cholesky'] = self._compute_precision_cholesky(adapt['covariances'], gmm_ubm.covariance_type)
         adapt['precisions'] = self._compute_precisions(adapt['precisions_cholesky'], gmm_ubm.means_, gmm_ubm.covariance_type)
