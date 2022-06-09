@@ -56,10 +56,11 @@ class MFCC:
         # short term energy 
         enerf_ = np.sum(sastf_,axis=0)
         # voiced frame selection with 6% average eneregy
-        enerfB_ = enerf_>(0.06*np.mean(enerf_))
+        # enerfB_ = enerf_>(0.06*np.mean(enerf_))
+        enerfB_ = enerf_>(0.6*np.mean(enerf_))
         # selected MFCC frames with energy threshold
-        mfcc_ = mfcc[:,enerfB_]
-        return mfcc_
+        voiced_mfcc_ = mfcc[:,enerfB_]
+        return voiced_mfcc_
 
 
     def compute(self, base_path, meta_info, split_dir, feat_dir, delta=False):
@@ -111,8 +112,7 @@ class MFCC:
                 fName_ = meta_info[data_type_][utterance_id_]['wav_path'].split('/')[-1]
                 data_path_ = base_path + '/' + meta_info[data_type_][utterance_id_]['wav_path']
                 
-                # This way of obtaining speaker_id was wrong. Corrected on  01-Jun-22 
-                # speaker_id_ = utterance_id_.split('_')[1]
+                # speaker_id_ = utterance_id_.split('_')[1] # This way of obtaining speaker_id was wrong. Corrected on  01-Jun-22 
                 speaker_id_ = meta_info[data_type_][utterance_id_]['speaker_id']
                 
                 if not os.path.exists(data_path_):

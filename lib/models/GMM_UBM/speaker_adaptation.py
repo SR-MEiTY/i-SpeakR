@@ -93,7 +93,7 @@ class SpeakerAdaptation:
     
         Parameters
         ----------
-        X : np array (dim X no. offrames)
+        X : np array (dim X no. of frames)
             
         gmm_ubm : universal background model (UBM) class object of sklearn gmm 
             (trained using all the features of development data)

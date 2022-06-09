@@ -233,7 +233,7 @@ if __name__ == '__main__':
             print(f"{metaobj.GENDER_DISTRIBUTION[f]}")
         except:
             print('')
-    print('\n')
+    print('\n\n')
         
     metaobj.INFO = select_data_sets(metaobj.INFO)
     print(f'\nSelected sets: {metaobj.INFO.keys()}\n')
@@ -245,16 +245,21 @@ if __name__ == '__main__':
     print('Global variables:')
     for key in CFG:
         print(f'\t{key}={CFG[key]}')
-    print('\n')
-
+    print('\n\n')
+    
+    print('Utterance chopping..')
     ChopUtterances(config=CFG).create_splits(metaobj.INFO, args.data_path)
+    print('\n\n')
 
+    print('Feature computation..')
     if CFG['FEATURE_NAME']=='MFCC':
         feat_info_ = MFCC(config=CFG).compute(args.data_path, metaobj.INFO, CFG['SPLITS_DIR'], CFG['FEAT_DIR'], delta=True)
+        print('\n\n')
             
     if CFG['MODEL_TYPE']=='GMM_UBM':
         GB_ = GaussianBackground(
             model_dir=CFG['MODEL_DIR'], 
+            opDir=CFG['OUTPUT_DIR'],
             num_mixtures=CFG['UBM_NCOMPONENTS'], 
             feat_scaling=CFG['FEATURE_SCALING']
             )
@@ -275,6 +280,7 @@ if __name__ == '__main__':
             GB_.train_ubm(FV_dev_, cov_type=CFG['COVARIANCE_TYPE'])
         else:
             print('The GMM-UBM is already available')
+        print('\n\n')
         
         
         ''' 
@@ -294,29 +300,35 @@ if __name__ == '__main__':
             cov_type=CFG['COVARIANCE_TYPE'], 
             use_adapt_w_cov=CFG['ADAPT_WEIGHT_COV']
             )
+        print('\n\n')
+        
+        sys.exit(0)
         
             
         ''' 
         Computing the performance metrics 
         '''
-        for utter_dur_ in [60]: # CFG['TEST_CHOP']:
+        for utter_dur_ in [30]: # CFG['TEST_CHOP']:
             res_fName = CFG['OUTPUT_DIR']+'/Result_'+str(utter_dur_)+'s.pkl'
             if not os.path.exists(res_fName):
                 ''' 
                 Testing the trained models 
                 '''
                 test_key_ = list(filter(None, [key if key.startswith('TEST') else '' for key in feat_info_.keys()]))
-                # if not os.path.exists(CFG['OUTPUT_DIR']+'/TEST_Data.pkl'):
-                #     FV_test_ = LoadFeatures(info=feat_info_[test_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
-                #     # with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'wb') as f_:
-                #     #     pickle.dump(FV_test_, f_, pickle.HIGHEST_PROTOCOL)
-                # else:
-                #     with open(CFG['OUTPUT_DIR']+'/TEST_Data.pkl', 'rb') as f_:
-                #         FV_test_ = pickle.load(f_)
-
-                # scores_ = GB_.perform_testing(opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores', X_TEST=FV_test_, duration=utter_dur_)
-
+                
+                '''
+                All test-data loaded at-once
+                '''
+                '''
+                FV_test_ = LoadFeatures(info=feat_info_[test_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
+                scores_ = GB_.perform_testing(opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores', X_TEST=FV_test_, duration=utter_dur_)
+                '''
+                
+                '''
+                Utterance-wise testing
+                '''
                 scores_ = GB_.perform_testing(opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores', feat_info=feat_info_[test_key_[0]], duration=utter_dur_)
+                
                 with open(res_fName, 'wb') as f_:
                     pickle.dump({'scores':scores_}, f_, pickle.HIGHEST_PROTOCOL)
             else:
@@ -327,18 +339,18 @@ if __name__ == '__main__':
             roc_opFile = CFG['FIG_DIR'] + '/ROC_' + str(utter_dur_) + 's.png'
             PerformanceMetrics().plot_roc(metrics_['fpr'], metrics_['tpr'], roc_opFile)
                 
-            print(f'Utterance duration: {utter_dur_}s:\n__________________________________________')
-            print(f"\tAccuracy: {np.round(metrics_['accuracy'],4)}")
-            print(f"\tMacro Average Precision: {np.round(metrics_['precision'],4)}")
-            print(f"\tMacro Average Recall: {np.round(metrics_['recall'],4)}")
-            print(f"\tMacro Average F1-score: {np.round(metrics_['f1-score'],4)}")
-            print(f"\tEER: {np.round(np.mean(metrics_['eer']),4)}")
+            print(f'\n\nUtterance duration: {utter_dur_}s:\n__________________________________________')
+            print(f"\tAccuracy: {np.round(metrics_['accuracy']*100,2)}")
+            print(f"\tMacro Average Precision: {np.round(metrics_['precision']*100,2)}")
+            print(f"\tMacro Average Recall: {np.round(metrics_['recall']*100,2)}")
+            print(f"\tMacro Average F1-score: {np.round(metrics_['f1-score']*100,2)}")
+            print(f"\tEER: {np.round(np.mean(metrics_['eer'])*100,2)}")
             with open(CFG['OUTPUT_DIR']+'/Performance.txt', 'a+') as f_:
                 f_.write(f'Utterance duration: {utter_dur_}s:\n__________________________________________\n')
-                f_.write(f"\tAccuracy: {np.round(metrics_['accuracy'],4)}\n")
-                f_.write(f"\tMacro Average Precision: {np.round(metrics_['precision'],4)}\n")
-                f_.write(f"\tMacro Average Recall: {np.round(metrics_['recall'],4)}\n")
-                f_.write(f"\tMacro Average F1-score: {np.round(metrics_['f1-score'],4)}\n")
-                f_.write(f"\tEER: {np.round(np.mean(metrics_['eer']),4)}\n\n")
+                f_.write(f"\tAccuracy: {np.round(metrics_['accuracy']*100,2)}\n")
+                f_.write(f"\tMacro Average Precision: {np.round(metrics_['precision']*100,2)}\n")
+                f_.write(f"\tMacro Average Recall: {np.round(metrics_['recall']*100,2)}\n")
+                f_.write(f"\tMacro Average F1-score: {np.round(metrics_['f1-score']*100,2)}\n")
+                f_.write(f"\tEER: {np.round(np.mean(metrics_['eer'])*100,2)}\n\n")
                 
                 

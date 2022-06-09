@@ -14,7 +14,7 @@ import os
 from sklearn.preprocessing import StandardScaler
 from lib.metrics.performance_metrics import PerformanceMetrics
 import psutil
-# import sys
+import sys
 
 
 class GaussianBackground:
@@ -26,9 +26,10 @@ class GaussianBackground:
     N_BATCHES = 0
     
     
-    def __init__(self, model_dir, num_mixtures=128, feat_scaling=0, n_batches=100):
-        self.NCOMP = num_mixtures
+    def __init__(self, model_dir, opDir, num_mixtures=128, feat_scaling=0, n_batches=20):
         self.MODEL_DIR = model_dir
+        self.OPDIR = opDir
+        self.NCOMP = num_mixtures
         self.FEATURE_SCALING = feat_scaling
         self.N_BATCHES = n_batches
     
@@ -79,14 +80,22 @@ class GaussianBackground:
         print(f'Feature memory size: {calculated_var_size_}')
 
         if calculated_var_size_>ram_mem_avail_:
+            '''
+            Batch-wise training GMM-UBM
+            '''
             print('Training GMM-UBM in a batch-wise manner')
             
+            batch_size_ = int(np.shape(X_combined_)[0]/self.N_BATCHES)
+            random_sample_idx_ = list(range(np.shape(X_combined_)[0]))
+            np.random.shuffle(random_sample_idx_)
+            batch_start_ = 0
+            batch_end_ = 0
             for batch_i_ in range(self.N_BATCHES):
-                batch_size_ = int(np.shape(X_combined_)[0]/self.N_BATCHES)
-                random_sample_idx_ = np.random.choice(list(range(np.shape(X_combined_)[0])), size=batch_size_, replace=False)
-                X_combined_batch_ = X_combined_[random_sample_idx_, :]
+                batch_start_ = batch_end_
+                batch_end_ = np.min([batch_start_+batch_size_, np.shape(X_combined_)[0]])
+                X_combined_batch_ = X_combined_[random_sample_idx_[batch_start_:batch_end_], :]
                 if batch_i_==0:
-                    self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose)
+                    self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose, reg_covar=1e-5)
                     self.BACKGROUND_MODEL.fit(X_combined_batch_)
                     print(f'Batch: {batch_i_+1} model trained')
                 else:
@@ -138,33 +147,50 @@ class GaussianBackground:
             try:
                 with open(ubm_fName_, 'rb') as f_:
                     self.BACKGROUND_MODEL = pickle.load(f_)['model']
+                with open(ubm_fName_, 'rb') as f_:
                     self.SCALER = pickle.load(f_)['scaler']
             except:
                 with open(ubm_fName_, 'rb') as f_:
                     self.BACKGROUND_MODEL = pickle.load(f_)
         
 
+        ''' Feature Scaling '''
+        if self.FEATURE_SCALING>0:
+            X_combined_ = np.empty([], dtype=np.float32)
+            for speaker_id_ in X_ENR.keys():
+                for split_id_ in X_ENR[speaker_id_].keys():
+                    if np.size(X_combined_)<=1:
+                        X_combined_ = X_ENR[speaker_id_][split_id_]
+                    else:
+                        X_combined_ = np.append(X_combined_, X_ENR[speaker_id_][split_id_], axis=0)
+    
+            if self.FEATURE_SCALING==1:
+                self.SCALER = StandardScaler(with_mean=True, with_std=False).fit(X_combined_)
+            elif self.FEATURE_SCALING==2:
+                self.SCALER = StandardScaler(with_mean=True, with_std=True).fit(X_combined_)
+
         # print(f'{X_ENR.keys()}')
         for speaker_id_ in X_ENR.keys():
             speaker_opDir_ = self.MODEL_DIR + '/' + speaker_id_ + '/'
             if not os.path.exists(speaker_opDir_):
                 os.makedirs(speaker_opDir_)
-            speaker_model_fName_ = speaker_opDir_ + '/adapted_ubm.pkl'
+            speaker_model_fName_ = speaker_opDir_ + '/' + str(speaker_id_) + '_adapted_model.pkl'
             if os.path.exists(speaker_model_fName_):
-                print(f'Adapted GMM model already available for speaker={speaker_id_}')
+                # print(f'Adapted GMM model already available for speaker={speaker_id_}')
                 continue
-
+            
+            fv_ = None
+            del fv_
             fv_ = np.empty([], dtype=np.float32)
-            for split_id_ in X_ENR[speaker_id_]:
+            for split_id_ in X_ENR[speaker_id_].keys():
                 if np.size(fv_)<=1:
                     fv_ = X_ENR[speaker_id_][split_id_]
                 else:
                     fv_ = np.append(fv_, X_ENR[speaker_id_][split_id_], axis=0)
+            print(f'fv_={np.shape(fv_)}')
             
             ''' Feature Scaling '''
-            if self.FEATURE_SCALING==1:
-                fv_ = self.SCALER.transform(fv_)
-            elif self.FEATURE_SCALING==2:
+            if self.FEATURE_SCALING>0:
                 fv_ = self.SCALER.transform(fv_)
 
             adapt_ = SpeakerAdaptation().adapt_ubm(fv_.T, self.BACKGROUND_MODEL, use_adapt_w_cov)
@@ -203,7 +229,7 @@ class GaussianBackground:
 
         Returns
         -------
-        Scores_ : 2D array
+        scores_ : 2D array
             AN (N x N) array consisting of scores for each test speaer against
             each enrollment speaker. N is the number of speakers.
 
@@ -212,6 +238,7 @@ class GaussianBackground:
             score_fName_ = opDir + '/' + opFileName.split('.')[0] + '_' + str(duration) + 's.pkl'
         else:
             score_fName_ = opDir + '/' + opFileName.split('.')[0] + '.pkl'
+            
         if not os.path.exists(score_fName_):
             if not self.BACKGROUND_MODEL:
                 ubm_fName_ = self.MODEL_DIR + '/ubm.pkl'
@@ -221,13 +248,16 @@ class GaussianBackground:
                 try:
                     with open(ubm_fName_, 'rb') as f_:
                         self.BACKGROUND_MODEL = pickle.load(f_)['model']
+                    with open(ubm_fName_, 'rb') as f_:
                         self.SCALER = pickle.load(f_)['scaler']
                 except:
                     with open(ubm_fName_, 'rb') as f_:
                         self.BACKGROUND_MODEL = pickle.load(f_)
+            else:
+                print('UBM already loaded')
     
             enrolled_speakers_ = next(os.walk(self.MODEL_DIR))[1]
-            Scores_ = {}
+            scores_ = {}
             true_lab_ = []
             pred_lab_ = []
 
@@ -237,12 +267,14 @@ class GaussianBackground:
             index_ = 0
             for enr_j_ in enrolled_speakers_:
                 enr_speaker_opDir_ = self.MODEL_DIR + '/' + enr_j_ + '/'
-                enr_speaker_model_fName_ = enr_speaker_opDir_ + '/adapted_ubm.pkl'
+                enr_speaker_model_fName_ = enr_speaker_opDir_ + '/' + str(enr_j_) + '_adapted_model.pkl'
                 if not os.path.exists(enr_speaker_model_fName_):
                     print(f'GMM model does not exist for speaker={enr_j_}')
                     continue
+                model_ = None
                 with open(enr_speaker_model_fName_, 'rb') as f_:
-                    enr_speaker_model_[index_] = {'speaker_id':enr_j_, 'model':pickle.load(f_)}
+                    model_ = pickle.load(f_)
+                enr_speaker_model_[index_] = {'speaker_id':enr_j_, 'model':model_}
                 index_ += 1
                     
             confusion_matrix_ = np.zeros((len(enr_speaker_model_), len(enr_speaker_model_)))
@@ -252,15 +284,22 @@ class GaussianBackground:
                 '''
                 Testing every test utterance one by one 
                 '''
+                total_splits_ = 0
+                for split_id_ in feat_info.keys():
+                    if duration:
+                        if not split_id_.split('_')[-2]==str(duration):
+                            continue
+                    total_splits_ += 1
+
                 split_count_ = 0
                 for split_id_ in feat_info.keys():
-                    split_count_ += 1
                     '''
                     Checking duration of utterance
                     '''
                     if duration:
                         if not split_id_.split('_')[-2]==str(duration):
                             continue
+                    split_count_ += 1
     
                     speaker_id_ = feat_info[split_id_]['speaker_id']
                     feature_path_ = feat_info[split_id_]['file_path']
@@ -275,34 +314,28 @@ class GaussianBackground:
                         fv_ = fv_.T
     
                     ''' Feature Scaling '''
-                    if self.FEATURE_SCALING==1:
-                        fv_ = self.SCALER.transform(fv_)
-                    elif self.FEATURE_SCALING==2:
+                    if self.FEATURE_SCALING>0:
                         fv_ = self.SCALER.transform(fv_)
                         
-                    all_enr_speaker_scores_ = None
-                    del all_enr_speaker_scores_
-                    all_enr_speaker_scores_ = np.zeros(len(enr_speaker_model_))
+                    llr_scores_ = np.zeros(len(enr_speaker_model_))
                     matched_speaker_id_ = ''
-                    background_model_scores_ = np.array(self.BACKGROUND_MODEL.score_samples(fv_))
+                    bg_model_scores_ = np.array(self.BACKGROUND_MODEL.score_samples(fv_))
                     for index_i_ in enr_speaker_model_.keys():
-                        speaker_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
-                        all_enr_speaker_scores_[index_i_] = np.mean(np.subtract(speaker_model_scores_,  background_model_scores_))
-                    map_idx_ = np.argmax(all_enr_speaker_scores_)
+                        spk_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
+                        llr_scores_[index_i_] = np.mean(np.subtract(spk_model_scores_,  bg_model_scores_))
+                    map_idx_ = np.argmax(llr_scores_)
                     matched_speaker_id_ = enr_speaker_model_[map_idx_]['speaker_id']
                     match_count_[map_idx_] += 1
-                    print(f'match_count_={match_count_}')
+                    # print(f'match_count_={match_count_}')
                     
-                    Scores_[split_id_] = {
+                    scores_[split_id_] = {
                         'index': map_idx_,
                         'speaker_id':speaker_id_, 
-                        'enr_speaker_scores': all_enr_speaker_scores_, 
+                        'llr_scores': llr_scores_, 
                         'matched_speaker':matched_speaker_id_,
+                        'enrolled_speakers': enrolled_speakers_,
                         }
                     
-                    '''
-                    Displaying progress
-                    '''
                     lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_)))
                     lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
                     confusion_matrix_[lab_true_, lab_pred_] += 1
@@ -310,9 +343,18 @@ class GaussianBackground:
                     true_lab_.append(str(speaker_id_))
                     pred_lab_.append(str(matched_speaker_id_))
                     accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
-                    print(f'\t{split_id_} splits=({split_count_}/{len(feat_info)}) true=({speaker_id_}) pred=({matched_speaker_id_}) max score={np.round(all_enr_speaker_scores_[map_idx_],4)} accuracy={accuracy_}%')
-                    with open(self.MODEL_DIR+'/../../Confusion_Matrix.txt', 'w+') as f_:
-                        f_.write(f'{confusion_matrix_}')
+
+                    '''
+                    Displaying progress
+                    '''
+                    # sys.stdout.write('\033[2K\033[1G')
+                    print(f'\t{split_id_}', end='\t', flush=True)
+                    print(f'splits=({split_count_}/{total_splits_})', end='\t', flush=True)
+                    print(f'true=({speaker_id_})', end='\t', flush=True)
+                    print(f'pred=({matched_speaker_id_})', end='\t', flush=True)
+                    print(f'accuracy={accuracy_}%', end='\n', flush=True)
+                    
+                np.save(self.OPDIR+'Confusion_Matrix_'+str(duration)+'s.npy', confusion_matrix_)
 
 
             if not feat_info:
@@ -341,42 +383,54 @@ class GaussianBackground:
                         fv_ = X_TEST[speaker_id_i_][split_id_]
                     
                         ''' Feature Scaling '''
-                        if self.FEATURE_SCALING==1:
-                            fv_ = self.SCALER.transform(fv_)
-                        elif self.FEATURE_SCALING==2:
+                        if self.FEATURE_SCALING>0:
                             fv_ = self.SCALER.transform(fv_)
                         
-                        all_enr_speaker_scores_ = None
-                        del all_enr_speaker_scores_
-                        all_enr_speaker_scores_ = np.zeros(len(enr_speaker_model_))
-                        background_model_scores_ = np.array(self.BACKGROUND_MODEL.score_samples(fv_))
+                        llr_scores_ = np.zeros(len(enr_speaker_model_))
+                        bg_model_scores_ = np.array(self.BACKGROUND_MODEL.score_samples(fv_))
                         for index_i_ in enr_speaker_model_.keys():
-                            speaker_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
-                            all_enr_speaker_scores_[index_i_] = np.mean(np.subtract(speaker_model_scores_, background_model_scores_))
-                        map_idx_ = np.argmax(all_enr_speaker_scores_)
+                            spk_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
+                            llr_scores_[index_i_] = np.mean(np.subtract(spk_model_scores_, bg_model_scores_))
+                        map_idx_ = np.argmax(llr_scores_)
                         matched_speaker_id_ = enr_speaker_model_[map_idx_]['speaker_id']
-                        Scores_[split_id_] = {
+                        scores_[split_id_] = {
                             'index': map_idx_,
                             'speaker_id':speaker_id_i_, 
-                            'enr_speaker_scores': all_enr_speaker_scores_,
+                            'llr_scores': llr_scores_,
                             'matched_speaker':matched_speaker_id_,
+                            'enrolled_speakers': enrolled_speakers_,
                             }
                         
-                        ''' Displaying progress '''
                         lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_i_)))
                         lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
+                        confusion_matrix_[lab_true_, lab_pred_] += 1
                         true_lab_.append(lab_true_)
                         pred_lab_.append(lab_pred_)
                         accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
-                        print(f'\t{split_id_} speakers=({speaker_count_}/{num_speakers_}) splits=({split_count_}/{num_splits_}) true={speaker_id_i_} ({lab_true_}) pred={matched_speaker_id_} ({lab_pred_}) max score={np.round(all_enr_speaker_scores_[map_idx_],4)} accuracy={accuracy_}%')
 
+                        '''
+                        Displaying progress
+                        '''
+                        sys.stdout.write('\033[2K\033[1G')
+                        print(f'\t{split_id_}', end='\t', flush=True)
+                        print(f'speakers=({speaker_count_}/{num_speakers_})', end='\t', flush=True)
+                        print(f'splits=({split_count_}/{num_splits_})', end='\t', flush=True)
+                        print(f'true={speaker_id_i_} ({lab_true_})', end='\t', flush=True)
+                        print(f'pred={matched_speaker_id_} ({lab_pred_})', end='\t', flush=True)
+                        print(f'accuracy={accuracy_}%', end='\n', flush=True)
+
+                np.save(self.OPDIR+'Confusion_Matrix_'+str(duration)+'s.npy', confusion_matrix_)
+
+            '''
+            Saving the scores for the selected duration
+            '''
             with open(score_fName_, 'wb') as f_:
-                pickle.dump(Scores_, f_, pickle.HIGHEST_PROTOCOL)
+                pickle.dump(scores_, f_, pickle.HIGHEST_PROTOCOL)
         else:
             with open(score_fName_, 'rb') as f_:
-                Scores_ = pickle.load(f_)
+                scores_ = pickle.load(f_)
         
-        return Scores_
+        return scores_
     
     
     def evaluate_performance(self, res):
@@ -395,7 +449,8 @@ class GaussianBackground:
                 accuracy, precision, recall, f1-score, eer
 
         '''
-        all_speaker_id_ = next(os.walk(self.MODEL_DIR))[1]
+        import matplotlib.pyplot as plt
+
         groundtruth_label_ = []
         ptd_labels_ = []
         groundtruth_scores_ = np.empty([])
@@ -403,15 +458,20 @@ class GaussianBackground:
         for split_id_ in res.keys():
             true_speaker_id_ = res[split_id_]['speaker_id']
             pred_speaker_id_ = res[split_id_]['matched_speaker']
-            true_label_ = np.squeeze(np.where(np.array(all_speaker_id_)==str(true_speaker_id_)))
+            
+            llr_scores_ = res[split_id_]['llr_scores']
+            plt.plot(llr_scores_)
+            
+            true_label_ = np.squeeze(np.where(np.array(res[split_id_]['enrolled_speakers'])==str(true_speaker_id_)))
             groundtruth_label_.append(true_label_)
-            ptd_labels_.append(np.squeeze(np.where(np.array(all_speaker_id_)==str(pred_speaker_id_))))
-            gt_score_ = np.zeros((1,np.size(all_speaker_id_)))
+            ptd_labels_.append(np.squeeze(np.where(np.array(res[split_id_]['enrolled_speakers'])==str(pred_speaker_id_))))
+            gt_score_ = np.zeros((1,np.size(res[split_id_]['enrolled_speakers'])))
             gt_score_[0,true_label_] = 1
-            ptd_scores_ = np.zeros((1,np.size(all_speaker_id_)))
-            for speaker_id_ in res[split_id_]['enr_speaker_scores'].keys():
-                lab_ = np.squeeze(np.where(np.array(all_speaker_id_)==str(speaker_id_)))
-                ptd_scores_[0,lab_] = res[split_id_]['enr_speaker_scores'][speaker_id_]
+            ptd_scores_ = np.zeros((1,np.size(res[split_id_]['enrolled_speakers'])))
+            for speaker_id_ in res[split_id_]['enrolled_speakers']:
+                lab_ = np.squeeze(np.where(np.array(res[split_id_]['enrolled_speakers'])==str(speaker_id_)))
+                ptd_scores_[0,lab_] = res[split_id_]['llr_scores'][lab_]
+            
             if np.size(groundtruth_scores_)<=1:
                 groundtruth_scores_ = gt_score_
                 predicted_scores_ = ptd_scores_
@@ -419,6 +479,9 @@ class GaussianBackground:
                 groundtruth_scores_ = np.append(groundtruth_scores_, gt_score_, axis=0)
                 predicted_scores_ = np.append(predicted_scores_, ptd_scores_, axis=0)
         
+        plt.savefig(self.OPDIR+'/LLR_scores.png')
+        
+        all_speaker_id_ = next(os.walk(self.MODEL_DIR))[1]
         label_list = list(range(np.size(all_speaker_id_)))
         confmat_, precision_, recall_, fscore_ = PerformanceMetrics().compute_identification_performance(groundtruth_label_, ptd_labels_, label_list)
         acc_ = np.sum(np.diag(confmat_))/np.sum(confmat_)
