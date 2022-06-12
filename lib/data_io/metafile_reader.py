@@ -77,13 +77,15 @@ class GetMetaInfo:
         None.
 
         '''
-        csv_files_ = [f_.split(self.PATH_DELIM)[-1] for f_ in librosa.util.find_files(self.DATA_PATH, ext=['csv'])]
+        csv_files_ = [f_.split(self.PATH_DELIM)[-1] for f_ in librosa.util.find_files(self.DATA_PATH, ext=['csv'], recurse=False)] # recurse=False added on 12-06-22
         for f_ in csv_files_:
             self.INFO[f_] = {}
             with open(self.DATA_PATH + '/' + f_, 'r' ) as meta_file_:
                 reader_ = csv.DictReader(meta_file_)
                 for row_ in reader_:
                     utterance_id_ = row_['utterance_id']
+                    if utterance_id_=='':
+                        continue
                     del row_['utterance_id']
                     if os.name=='posix': # Linux
                         row_['wav_path'] = '/'.join(row_['wav_path'].split('\\'))

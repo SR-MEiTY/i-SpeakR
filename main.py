@@ -301,9 +301,7 @@ if __name__ == '__main__':
             use_adapt_w_cov=CFG['ADAPT_WEIGHT_COV']
             )
         print('\n\n')
-        
-        sys.exit(0)
-        
+                
             
         ''' 
         Computing the performance metrics 

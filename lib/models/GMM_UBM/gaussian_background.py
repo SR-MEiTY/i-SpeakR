@@ -26,7 +26,7 @@ class GaussianBackground:
     N_BATCHES = 0
     
     
-    def __init__(self, model_dir, opDir, num_mixtures=128, feat_scaling=0, n_batches=20):
+    def __init__(self, model_dir, opDir, num_mixtures=128, feat_scaling=0, n_batches=5):
         self.MODEL_DIR = model_dir
         self.OPDIR = opDir
         self.NCOMP = num_mixtures
@@ -34,7 +34,7 @@ class GaussianBackground:
         self.N_BATCHES = n_batches
     
     
-    def train_ubm(self, X, cov_type='diag', max_iterations=100, num_init=3, verbose=1):
+    def train_ubm(self, X, cov_type='diag', max_iterations=100, num_init=1, verbose=1):
         '''
         Training the GMM Universal Background Model.
 
@@ -95,7 +95,7 @@ class GaussianBackground:
                 batch_end_ = np.min([batch_start_+batch_size_, np.shape(X_combined_)[0]])
                 X_combined_batch_ = X_combined_[random_sample_idx_[batch_start_:batch_end_], :]
                 if batch_i_==0:
-                    self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose, reg_covar=1e-5)
+                    self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose, reg_covar=1e-3)
                     self.BACKGROUND_MODEL.fit(X_combined_batch_)
                     print(f'Batch: {batch_i_+1} model trained')
                 else:
@@ -187,7 +187,6 @@ class GaussianBackground:
                     fv_ = X_ENR[speaker_id_][split_id_]
                 else:
                     fv_ = np.append(fv_, X_ENR[speaker_id_][split_id_], axis=0)
-            print(f'fv_={np.shape(fv_)}')
             
             ''' Feature Scaling '''
             if self.FEATURE_SCALING>0:

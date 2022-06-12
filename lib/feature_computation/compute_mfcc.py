@@ -56,8 +56,8 @@ class MFCC:
         # short term energy 
         enerf_ = np.sum(sastf_,axis=0)
         # voiced frame selection with 6% average eneregy
-        # enerfB_ = enerf_>(0.06*np.mean(enerf_))
-        enerfB_ = enerf_>(0.6*np.mean(enerf_))
+        enerfB_ = enerf_>(0.06*np.mean(enerf_))
+        # enerfB_ = enerf_>(0.6*np.mean(enerf_))
         # selected MFCC frames with energy threshold
         voiced_mfcc_ = mfcc[:,enerfB_]
         return voiced_mfcc_
@@ -151,10 +151,14 @@ class MFCC:
                         
                         if not 'Xin_' in locals(): # Check if the wav has already been loaded
                             Xin_, fs_ = librosa.load(data_path_, mono=True, sr=self.SAMPLING_RATE)
-                            Xin_ = Normalize().mean_max_normalize(Xin_)
+                            # Xin_ = Normalize().mean_max_normalize(Xin_)
                         
                         Xin_split_ = None
                         Xin_split_ = Xin_[first_sample_:last_sample_].copy()
+                        try:
+                            Xin_split_ = Normalize().mean_max_normalize(Xin_split_)
+                        except:
+                            continue
                         if len(Xin_split_)<=self.NFFT:
                             del feature_details_[data_type_][split_id_]
                             continue
