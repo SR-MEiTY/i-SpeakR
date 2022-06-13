@@ -340,7 +340,7 @@ if __name__ == '__main__':
             Computing the performance metrics 
             '''
             metrics_ = GB_.evaluate_performance(scores_)
-            roc_opFile =  + '/ROC_' + str(utter_dur_) + 's.png'
+            roc_opFile = test_opDir_ + '/ROC_' + str(utter_dur_) + 's.png'
             PerformanceMetrics().plot_roc(metrics_['fpr'], metrics_['tpr'], roc_opFile)
                 
             print(f'\n\nUtterance duration: {utter_dur_}s:\n__________________________________________')
