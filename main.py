@@ -134,6 +134,7 @@ def get_configurations(args):
         'PREEMPHASIS': section.getboolean('preemphasis'),           # Boolean flag indicating pre-emphasis required or not. True indicates pre-emphasis is required, False indicates pre-emphasis not required.
         'N_MELS': int(section['n_mels']),                           # Number of Mel filters to be used
         'N_MFCC': int(section['n_mfcc']),                           # Number of MFCC coefficients to be computed. If EXCL_C0=True, N_MFCC+1 coefficients are computed and c0 is ignored
+        'COMPUTE_DELTA_FEAT': section.getboolean('compute_delta_feat'), # Boolean flag indicating whether delta features are computed
         'DELTA_WIN': int(section['delta_win']),                     # Context window to be used for computing Delta features
         'EXCL_C0': section.getboolean('excl_c0'),                   # Boolean flag indicating whether MFCC c0 to be used or not. True indicates c0 is included. False indicates c0 is to be ignored and N_MFCC+1 coefficients to be computed
         'FEATURE_NAME': section['feature_name'],                    # Parameter to indicate which feature to compute
@@ -146,6 +147,12 @@ def get_configurations(args):
         'COVARIANCE_TYPE': section['covariance_type'],              # Type of covariance: 'full', 'diag', 'tied'
         'ADAPT_WEIGHT_COV': section.getboolean('adapt_weight_cov'), # Flag to indicate whether to adapt the weights and covariances of the speaker models
         }
+    
+    if CFG['FEATURE_NAME']=='MFCC':
+        if CFG['COMPUTE_DELTA_FEAT']:
+            CFG['NUM_DIM'] = 3*CFG['N_MFCC']
+        else:
+            CFG['NUM_DIM'] = CFG['N_MFCC']
 
     CFG['OUTPUT_DIR'] = args.output_path + '/i-SpeakR_output/' + args.data_path.split('/')[-2] + '_' + CFG['today'] + '/'
     if not os.path.exists(CFG['OUTPUT_DIR']):
@@ -162,10 +169,6 @@ def get_configurations(args):
     CFG['MODEL_DIR'] = CFG['OUTPUT_DIR'] + '/models/' + CFG['FEATURE_NAME'] + '_' + CFG['MODEL_TYPE'] + '/'
     if not os.path.exists(CFG['MODEL_DIR']):
         os.makedirs(CFG['MODEL_DIR'])
-
-    CFG['FIG_DIR'] = CFG['OUTPUT_DIR'] + '/figures/'
-    if not os.path.exists(CFG['FIG_DIR']):
-        os.makedirs(CFG['FIG_DIR'])
     
     return CFG
     
@@ -253,7 +256,7 @@ if __name__ == '__main__':
 
     print('Feature computation..')
     if CFG['FEATURE_NAME']=='MFCC':
-        feat_info_ = MFCC(config=CFG).compute(args.data_path, metaobj.INFO, CFG['SPLITS_DIR'], CFG['FEAT_DIR'], delta=True)
+        feat_info_ = MFCC(config=CFG).compute(args.data_path, metaobj.INFO, CFG['SPLITS_DIR'], CFG['FEAT_DIR'], delta=CFG['COMPUTE_DELTA_FEAT'])
         print('\n\n')
             
     if CFG['MODEL_TYPE']=='GMM_UBM':
@@ -271,7 +274,7 @@ if __name__ == '__main__':
         if not os.path.exists(ubm_fName):
             dev_key_ = list(filter(None, [key if key.startswith('DEV') else '' for key in feat_info_.keys()]))
             if not os.path.exists(CFG['OUTPUT_DIR']+'/DEV_Data.pkl'):
-                FV_dev_ = LoadFeatures(info=feat_info_[dev_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
+                FV_dev_ = LoadFeatures(info=feat_info_[dev_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=CFG['NUM_DIM'])
                 # with open(CFG['OUTPUT_DIR']+'/DEV_Data.pkl', 'wb') as f_:
                 #     pickle.dump(FV_dev_, f_, pickle.HIGHEST_PROTOCOL)
             else:
@@ -288,7 +291,7 @@ if __name__ == '__main__':
         '''
         enr_key_ = list(filter(None, [key if key.startswith('ENR') else '' for key in feat_info_.keys()]))
         if not os.path.exists(CFG['OUTPUT_DIR']+'/ENR_Data.pkl'):
-            FV_enr_ = LoadFeatures(info=feat_info_[enr_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
+            FV_enr_ = LoadFeatures(info=feat_info_[enr_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=CFG['NUM_DIM'])
             # with open(CFG['OUTPUT_DIR']+'/ENR_Data.pkl', 'wb') as f_:
             #     pickle.dump(FV_enr_, f_, pickle.HIGHEST_PROTOCOL)
         else:
@@ -304,28 +307,28 @@ if __name__ == '__main__':
                 
             
         ''' 
-        Computing the performance metrics 
+        Testing the trained models 
         '''
-        for utter_dur_ in [30]: # CFG['TEST_CHOP']:
-            res_fName = CFG['OUTPUT_DIR']+'/Result_'+str(utter_dur_)+'s.pkl'
-            if not os.path.exists(res_fName):
-                ''' 
-                Testing the trained models 
-                '''
-                test_key_ = list(filter(None, [key if key.startswith('TEST') else '' for key in feat_info_.keys()]))
+        test_key_ = list(filter(None, [key if key.startswith('TEST') else '' for key in feat_info_.keys()]))
+        test_opDir_ = CFG['OUTPUT_DIR'] + '/' + test_key_[0].split('.')[0] + '/'
+        if not os.path.exists(test_opDir_):
+            os.makedirs(test_opDir_)
                 
+        for utter_dur_ in CFG['TEST_CHOP']:
+            res_fName = test_opDir_ + '/Result_'+str(utter_dur_)+'s.pkl'
+            if not os.path.exists(res_fName):
                 '''
                 All test-data loaded at-once
                 '''
                 '''
-                FV_test_ = LoadFeatures(info=feat_info_[test_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=3*CFG['N_MFCC'])
+                FV_test_ = LoadFeatures(info=feat_info_[test_key_[0]], feature_name=CFG['FEATURE_NAME']).load(dim=CFG['NUM_DIM'])
                 scores_ = GB_.perform_testing(opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores', X_TEST=FV_test_, duration=utter_dur_)
                 '''
                 
                 '''
                 Utterance-wise testing
                 '''
-                scores_ = GB_.perform_testing(opDir=CFG['OUTPUT_DIR'], opFileName='Test_Scores', feat_info=feat_info_[test_key_[0]], duration=utter_dur_)
+                scores_ = GB_.perform_testing(opDir=test_opDir_, feat_info=feat_info_[test_key_[0]], dim=CFG['NUM_DIM'], duration=utter_dur_)
                 
                 with open(res_fName, 'wb') as f_:
                     pickle.dump({'scores':scores_}, f_, pickle.HIGHEST_PROTOCOL)
@@ -333,8 +336,11 @@ if __name__ == '__main__':
                 with open(res_fName, 'rb') as f_:
                     scores_ = pickle.load(f_)['scores']
 
+            ''' 
+            Computing the performance metrics 
+            '''
             metrics_ = GB_.evaluate_performance(scores_)
-            roc_opFile = CFG['FIG_DIR'] + '/ROC_' + str(utter_dur_) + 's.png'
+            roc_opFile =  + '/ROC_' + str(utter_dur_) + 's.png'
             PerformanceMetrics().plot_roc(metrics_['fpr'], metrics_['tpr'], roc_opFile)
                 
             print(f'\n\nUtterance duration: {utter_dur_}s:\n__________________________________________')
@@ -343,7 +349,8 @@ if __name__ == '__main__':
             print(f"\tMacro Average Recall: {np.round(metrics_['recall']*100,2)}")
             print(f"\tMacro Average F1-score: {np.round(metrics_['f1-score']*100,2)}")
             print(f"\tEER: {np.round(np.mean(metrics_['eer'])*100,2)}")
-            with open(CFG['OUTPUT_DIR']+'/Performance.txt', 'a+') as f_:
+
+            with open(test_opDir_+'/Performance.txt', 'a+') as f_:
                 f_.write(f'Utterance duration: {utter_dur_}s:\n__________________________________________\n')
                 f_.write(f"\tAccuracy: {np.round(metrics_['accuracy']*100,2)}\n")
                 f_.write(f"\tMacro Average Precision: {np.round(metrics_['precision']*100,2)}\n")

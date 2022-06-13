@@ -206,7 +206,7 @@ class GaussianBackground:
             print(f'Adapted GMM model saved for speaker={speaker_id_}')
             
             
-    def perform_testing(self, opDir, opFileName, X_TEST=None, feat_info=None, dim=39, duration=None):
+    def perform_testing(self, opDir, X_TEST=None, feat_info=None, dim=None, duration=None):
         '''
         Compute test speaker scores against all enrollment speaker models.
 
@@ -214,8 +214,6 @@ class GaussianBackground:
         ----------
         opDir : str
             Output path.
-        opFileName : str
-            Output file name.
         X_TEST : dict, optional
             Dictionary containing the speaker-wise test data.
         feat_info : dict, optional
@@ -234,9 +232,9 @@ class GaussianBackground:
 
         '''
         if duration:
-            score_fName_ = opDir + '/' + opFileName.split('.')[0] + '_' + str(duration) + 's.pkl'
+            score_fName_ = opDir + '/Test_Scores_' + str(duration) + 's.pkl'
         else:
-            score_fName_ = opDir + '/' + opFileName.split('.')[0] + '.pkl'
+            score_fName_ = opDir + '/Test_Scores.pkl'
             
         if not os.path.exists(score_fName_):
             if not self.BACKGROUND_MODEL:
@@ -284,10 +282,14 @@ class GaussianBackground:
                 Testing every test utterance one by one 
                 '''
                 total_splits_ = 0
+                
+                speaker_id_list_ = []
                 for split_id_ in feat_info.keys():
+                    split_dur_ = int(split_id_.split('_')[-2])
                     if duration:
-                        if not split_id_.split('_')[-2]==str(duration):
+                        if not split_dur_==duration:
                             continue
+                    speaker_id_list_.append(feat_info[split_id_]['speaker_id'])
                     total_splits_ += 1
 
                 split_count_ = 0
@@ -325,7 +327,6 @@ class GaussianBackground:
                     map_idx_ = np.argmax(llr_scores_)
                     matched_speaker_id_ = enr_speaker_model_[map_idx_]['speaker_id']
                     match_count_[map_idx_] += 1
-                    # print(f'match_count_={match_count_}')
                     
                     scores_[split_id_] = {
                         'index': map_idx_,
@@ -353,7 +354,7 @@ class GaussianBackground:
                     print(f'pred=({matched_speaker_id_})', end='\t', flush=True)
                     print(f'accuracy={accuracy_}%', end='\n', flush=True)
                     
-                np.save(self.OPDIR+'Confusion_Matrix_'+str(duration)+'s.npy', confusion_matrix_)
+                np.save(opDir+'/Confusion_Matrix_'+str(duration)+'s.npy', confusion_matrix_)
 
 
             if not feat_info:
@@ -418,7 +419,7 @@ class GaussianBackground:
                         print(f'pred={matched_speaker_id_} ({lab_pred_})', end='\t', flush=True)
                         print(f'accuracy={accuracy_}%', end='\n', flush=True)
 
-                np.save(self.OPDIR+'Confusion_Matrix_'+str(duration)+'s.npy', confusion_matrix_)
+                np.save(opDir+'/Confusion_Matrix_'+str(duration)+'s.npy', confusion_matrix_)
 
             '''
             Saving the scores for the selected duration
@@ -440,6 +441,8 @@ class GaussianBackground:
         ----------
         res : dict
             Dictionary containing the sub-utterance wise scores.
+        opDir : str
+            Output path.
 
         Returns
         -------
@@ -448,8 +451,6 @@ class GaussianBackground:
                 accuracy, precision, recall, f1-score, eer
 
         '''
-        import matplotlib.pyplot as plt
-
         groundtruth_label_ = []
         ptd_labels_ = []
         groundtruth_scores_ = np.empty([])
@@ -457,10 +458,7 @@ class GaussianBackground:
         for split_id_ in res.keys():
             true_speaker_id_ = res[split_id_]['speaker_id']
             pred_speaker_id_ = res[split_id_]['matched_speaker']
-            
-            llr_scores_ = res[split_id_]['llr_scores']
-            plt.plot(llr_scores_)
-            
+                        
             true_label_ = np.squeeze(np.where(np.array(res[split_id_]['enrolled_speakers'])==str(true_speaker_id_)))
             groundtruth_label_.append(true_label_)
             ptd_labels_.append(np.squeeze(np.where(np.array(res[split_id_]['enrolled_speakers'])==str(pred_speaker_id_))))
@@ -477,9 +475,7 @@ class GaussianBackground:
             else:
                 groundtruth_scores_ = np.append(groundtruth_scores_, gt_score_, axis=0)
                 predicted_scores_ = np.append(predicted_scores_, ptd_scores_, axis=0)
-        
-        plt.savefig(self.OPDIR+'/LLR_scores.png')
-        
+                
         all_speaker_id_ = next(os.walk(self.MODEL_DIR))[1]
         label_list = list(range(np.size(all_speaker_id_)))
         confmat_, precision_, recall_, fscore_ = PerformanceMetrics().compute_identification_performance(groundtruth_label_, ptd_labels_, label_list)

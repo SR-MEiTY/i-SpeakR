@@ -28,7 +28,7 @@ class MFCC:
         self.N_MELS = int(config['N_MELS'])
         self.N_MFCC = int(config['N_MFCC'])
         self.DELTA_WIN = int(config['DELTA_WIN'])
-        self.EXCL_C0 =config['EXCL_C0']
+        self.EXCL_C0 = config['EXCL_C0']
     
     
     def ener_mfcc(self, y, mfcc):
@@ -118,7 +118,7 @@ class MFCC:
                 if not os.path.exists(data_path_):
                     print('\tWAV file does not exist ', data_path_)
                     continue
-    
+                
                 opDir_path_ = feat_dir + '/'
                 if not os.path.exists(opDir_path_):
                     os.makedirs(opDir_path_)
@@ -127,6 +127,11 @@ class MFCC:
                 if not os.path.exists(chop_details_fName_):
                     print(f'\t{chop_details_fName_} Utterance chop details unavailable')
                     continue
+
+                # Xin_, fs_ = librosa.load(data_path_, mono=True, sr=self.SAMPLING_RATE)
+                # Xin_ = Normalize().mean_max_normalize(Xin_)
+                Xin_ = None
+                del Xin_
                 
                 utter_count_ += 1
                 with open(chop_details_fName_, 'r', encoding='utf8') as fid_:
@@ -139,11 +144,12 @@ class MFCC:
                 
                         opFile_ = opDir_path_ + '/' + split_id_ + '.npy'
                         feature_details_[data_type_][split_id_] = {
-                            'feature_name':'MFCC', 
-                            'utterance_id':utterance_id_, 
-                            'file_path':opFile_, 
-                            'speaker_id':speaker_id_
+                            'feature_name': 'MFCC', 
+                            'utterance_id': utterance_id_, 
+                            'file_path': opFile_, 
+                            'speaker_id': speaker_id_
                             }
+
                         # Check if feature file already exists
                         if os.path.exists(opFile_):
                             # print(f'\t{split_id_} feature available')
@@ -151,20 +157,18 @@ class MFCC:
                         
                         if not 'Xin_' in locals(): # Check if the wav has already been loaded
                             Xin_, fs_ = librosa.load(data_path_, mono=True, sr=self.SAMPLING_RATE)
-                            # Xin_ = Normalize().mean_max_normalize(Xin_)
+                            Xin_ = Normalize().mean_max_normalize(Xin_)
                         
                         Xin_split_ = None
-                        Xin_split_ = Xin_[first_sample_:last_sample_].copy()
-                        try:
-                            Xin_split_ = Normalize().mean_max_normalize(Xin_split_)
-                        except:
-                            continue
+                        del Xin_split_
+                        Xin_split_ = np.array(Xin_[first_sample_:last_sample_], copy=True)
                         if len(Xin_split_)<=self.NFFT:
                             del feature_details_[data_type_][split_id_]
                             continue
                         
-                        # Exclude c0 from mfcc computation
-                        if self.EXCL_C0:
+                        mfcc_ = None
+                        del mfcc_
+                        if self.EXCL_C0: # Exclude c0 from mfcc computation
                             mfcc_ = librosa.feature.mfcc(y=Xin_split_, sr=fs_, n_mfcc=self.N_MFCC+1, dct_type=2, norm='ortho', lifter=0, n_fft=self.NFFT, win_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH, window='hann', center=False, n_mels=self.N_MELS)
                             mfcc_ = mfcc_[1:,:] # excluding c0
                         else:
