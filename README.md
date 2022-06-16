@@ -3,6 +3,24 @@
 Speaker recognition toolkit for Indian languages
 ------------------------------------------------
 
+
+How to run the toolkit?
+-----------------------
+1. Download the toolkit
+2. Open a terminal
+3. Install Anaconda in your system. <a href="https://docs.anaconda.com/anaconda/install/">Refer here</a>
+4. Run:
+	$ cd [path to tookit]
+5. Create a new virtual environment using the environment.yml file. <a href="https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-from-an-environment-yml-file">Refer here</a>
+6. Activate the new environment
+7. Open run_program.sh and edit the values for various parameters. The details about the parameters can be checked by running the following command:
+	$ python main.py -h
+8. Execute the following command to run the toolkit:
+	$ ./run_program.sh
+9. Provide any inputs the programs asks for during the execution.
+
+
+
 Coding conventions followed:
 ---------------------------
     Local variable:   Should have all lower-case alphabets [a-z]
