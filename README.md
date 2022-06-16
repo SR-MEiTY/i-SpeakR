@@ -13,7 +13,9 @@ How to run the toolkit?
 	$ cd [path to tookit]
 5. Create a new virtual environment using the environment.yml file. <a href="https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-from-an-environment-yml-file">Refer here</a>
 6. Activate the new environment
-7. Open run_program.sh and edit the values for various parameters. The details about the parameters can be checked by running the following command:
+7. Open run_program.sh and edit the values for various parameters. 
+   The details about the parameters can be checked by running the 
+   following command:
 	$ python main.py -h
 8. Execute the following command to run the toolkit:
 	$ ./run_program.sh
