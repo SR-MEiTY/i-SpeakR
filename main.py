@@ -123,7 +123,7 @@ def get_configurations(args):
     config.read('config.ini')
     section = config['MAIN']
     CFG = {
-        'today': datetime.datetime.now().strftime("%Y-%m-%d"),
+        'TODAY': datetime.datetime.now().strftime("%Y-%m-%d"),
         'SAMPLING_RATE': int(section['sampling_rate']),             # Sampling rate to be used for the audio files
         'NFFT': int(section['n_fft']),                              # Number of DFT points to be used
         'FRAME_SIZE': int(section['frame_size']),                   # Short-term frame size in miliseconds
@@ -154,7 +154,7 @@ def get_configurations(args):
         else:
             CFG['NUM_DIM'] = CFG['N_MFCC']
 
-    CFG['OUTPUT_DIR'] = args.output_path + '/i-SpeakR_output/' + args.data_path.split('/')[-2] + '_' + CFG['today'] + '/'
+    CFG['OUTPUT_DIR'] = args.output_path + '/i-SpeakR_output/' + args.data_path.split('/')[-2] + '/'
     if not os.path.exists(CFG['OUTPUT_DIR']):
         os.makedirs(CFG['OUTPUT_DIR'])
         
