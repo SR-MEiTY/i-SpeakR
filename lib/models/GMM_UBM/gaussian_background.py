@@ -26,15 +26,15 @@ class GaussianBackground:
     N_BATCHES = 0
     
     
-    def __init__(self, model_dir, opDir, num_mixtures=128, feat_scaling=0, n_batches=5):
+    def __init__(self, model_dir, opDir, num_mixtures=128, feat_scaling=0):
         self.MODEL_DIR = model_dir
         self.OPDIR = opDir
         self.NCOMP = num_mixtures
         self.FEATURE_SCALING = feat_scaling
-        self.N_BATCHES = n_batches
+        self.N_BATCHES = 1
     
     
-    def train_ubm(self, X, cov_type='diag', max_iterations=100, num_init=1, verbose=1):
+    def train_ubm(self, X, cov_type='diag', max_iterations=100, num_init=1, verbosity=1):
         '''
         Training the GMM Universal Background Model.
 
@@ -48,7 +48,7 @@ class GaussianBackground:
             Maximum number of iterations to train the GMM. The default is 100.
         num_init : int, optional
             Number of random initializations of the GMM model. The default is 3.
-        verbose : int, optional
+        verbosity : int, optional
             Flag to indicate whether to print GMM training outputs. The default is 1.
 
         Returns
@@ -60,30 +60,38 @@ class GaussianBackground:
         for speaker_id_ in X.keys():
             for split_id_ in X[speaker_id_].keys():
                 if np.size(X_combined_)<=1:
-                    X_combined_ = X[speaker_id_][split_id_]
+                    X_combined_ = np.array(X[speaker_id_][split_id_], dtype=np.float32)
                 else:
-                    X_combined_ = np.append(X_combined_, X[speaker_id_][split_id_], axis=0)
-        print(f'X_combined={np.shape(X_combined_)}')
+                    X_combined_ = np.append(X_combined_, np.array(X[speaker_id_][split_id_], dtype=np.float32), axis=0)
+        print(f'Development data shape={np.shape(X_combined_)} data_type={X_combined_.dtype}')
 
         ''' Feature Scaling '''
         if self.FEATURE_SCALING==1:
             self.SCALER = StandardScaler(with_mean=True, with_std=False).fit(X_combined_)
             X_combined_ = self.SCALER.transform(X_combined_)
+            X_combined_ = X_combined_.astype(np.float32)
         elif self.FEATURE_SCALING==2:
             self.SCALER = StandardScaler(with_mean=True, with_std=True).fit(X_combined_)
             X_combined_ = self.SCALER.transform(X_combined_)
+            X_combined_ = X_combined_.astype(np.float32)
         
         ram_mem_avail_ = psutil.virtual_memory().available >> 20 # in MB; >> 30 in GB
-        # feat_memsize_ = sys.getsizeof(X_combined_) >> 20 # in MB; >> 30 in GB
-        calculated_var_size_ = np.shape(X_combined_)[0]*np.shape(X_combined_)[1]*self.NCOMP*4 >> 20
-        print(f'Available RAM: {ram_mem_avail_}')
-        print(f'Feature memory size: {calculated_var_size_}')
+        print(f'Available RAM: {ram_mem_avail_} MB')
+        
+        if isinstance(X_combined_, np.float32):
+            ram_mem_req_ = 2*(np.product(np.shape(X_combined_))*4 + np.shape(X_combined_)[0]*self.NCOMP*4) >> 20
+        elif isinstance(X_combined_, np.float64):
+            ram_mem_req_ = 2*(np.product(np.shape(X_combined_))*8 + np.shape(X_combined_)[0]*self.NCOMP*8) >> 20
+        else:
+            ram_mem_req_ = 2*(np.product(np.shape(X_combined_))*8 + np.shape(X_combined_)[0]*self.NCOMP*8) >> 20
+        print(f'RAM required: {ram_mem_req_} MB')
 
-        if calculated_var_size_>ram_mem_avail_:
+        if ram_mem_req_>ram_mem_avail_:
+            self.N_BATCHES = int(np.ceil(ram_mem_req_/(0.3*ram_mem_avail_)))
             '''
             Batch-wise training GMM-UBM
             '''
-            print('Training GMM-UBM in a batch-wise manner')
+            print(f'Training GMM-UBM in a batch-wise manner. # Batches={self.N_BATCHES}')
             
             batch_size_ = int(np.shape(X_combined_)[0]/self.N_BATCHES)
             random_sample_idx_ = list(range(np.shape(X_combined_)[0]))
@@ -93,10 +101,19 @@ class GaussianBackground:
             for batch_i_ in range(self.N_BATCHES):
                 batch_start_ = batch_end_
                 batch_end_ = np.min([batch_start_+batch_size_, np.shape(X_combined_)[0]])
-                X_combined_batch_ = X_combined_[random_sample_idx_[batch_start_:batch_end_], :]
+                X_combined_batch_ = np.array(X_combined_[random_sample_idx_[batch_start_:batch_end_], :], dtype=np.float32)
                 if batch_i_==0:
-                    self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose, reg_covar=1e-3)
-                    self.BACKGROUND_MODEL.fit(X_combined_batch_)
+                    training_success_ = False
+                    reg_covar_ = 1e-6
+                    while not training_success_:
+                        try:
+                            self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbosity, reg_covar=reg_covar_)
+                            self.BACKGROUND_MODEL.fit(X_combined_batch_)
+                            training_success_ = True
+                        except:
+                            reg_covar_ = np.max([reg_covar_*10, 1e-1])
+                            print(f'Singleton component error. Reducing reg_covar to {np.round(reg_covar_,6)}')
+
                     print(f'Batch: {batch_i_+1} model trained')
                 else:
                     adapt_ = None
@@ -110,8 +127,16 @@ class GaussianBackground:
                     print(f'Batch: {batch_i_+1} model updated')
         
         else:
-            self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbose)
-            self.BACKGROUND_MODEL.fit(X_combined_)
+            training_success_ = False
+            reg_covar_ = 1e-6
+            while not training_success_:
+                try:
+                    self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbosity, reg_covar=reg_covar_)
+                    self.BACKGROUND_MODEL.fit(X_combined_)
+                    training_success_ = True
+                except:
+                    reg_covar_ = np.max([reg_covar_*10, 1e-1])
+                    print(f'Singleton component error. Reducing reg_covar to {np.round(reg_covar_,6)}')
         
         ubm_fName = self.MODEL_DIR + '/ubm.pkl'
         with open(ubm_fName, 'wb') as f:
@@ -160,14 +185,16 @@ class GaussianBackground:
             for speaker_id_ in X_ENR.keys():
                 for split_id_ in X_ENR[speaker_id_].keys():
                     if np.size(X_combined_)<=1:
-                        X_combined_ = X_ENR[speaker_id_][split_id_]
+                        X_combined_ = np.array(X_ENR[speaker_id_][split_id_], dtype=np.float32)
                     else:
-                        X_combined_ = np.append(X_combined_, X_ENR[speaker_id_][split_id_], axis=0)
+                        X_combined_ = np.append(X_combined_, np.array(X_ENR[speaker_id_][split_id_], dtype=np.float32), axis=0)
     
             if self.FEATURE_SCALING==1:
                 self.SCALER = StandardScaler(with_mean=True, with_std=False).fit(X_combined_)
+                X_combined_ = X_combined_.astype(np.float32)
             elif self.FEATURE_SCALING==2:
                 self.SCALER = StandardScaler(with_mean=True, with_std=True).fit(X_combined_)
+                X_combined_ = X_combined_.astype(np.float32)
 
         # print(f'{X_ENR.keys()}')
         for speaker_id_ in X_ENR.keys():
@@ -317,6 +344,7 @@ class GaussianBackground:
                     ''' Feature Scaling '''
                     if self.FEATURE_SCALING>0:
                         fv_ = self.SCALER.transform(fv_)
+                        fv_ = fv_.astype(np.float32)
                         
                     llr_scores_ = np.zeros(len(enr_speaker_model_))
                     matched_speaker_id_ = ''
