@@ -10,6 +10,7 @@ Created on Wed Jul 20 18:16:13 2022
 from lib.feature_computation.compute_mfcc import MFCC
 from lib.feature_computation.load_features import LoadFeatures
 from lib.models.GMM_UBM.gaussian_background import GaussianBackground
+from lib.metrics.performance_metrics import PerformanceMetrics
 import os
 import pickle
 import configparser
@@ -122,6 +123,8 @@ if __name__ == '__main__':
         if not os.path.exists(test_opDir_):
             os.makedirs(test_opDir_)
         
+        FPR_ = {}
+        TPR_ = {}
         test_chop = json.loads(PARAMS.get('test_chop'))
         for utter_dur_ in test_chop:
             res_fName = test_opDir_ + '/Result_' + str(utter_dur_) + 's.pkl'
@@ -161,5 +164,9 @@ if __name__ == '__main__':
             ''' 
             Computing the performance metrics 
             '''
-            GB_.evaluate_performance(scores_, test_opDir_, utter_dur_)
+            metrics_ = GB_.evaluate_performance(scores_, test_opDir_, utter_dur_)
+            FPR_[utter_dur_] = metrics_['fpr']
+            TPR_[utter_dur_] = metrics_['tpr']
                 
+        roc_opFile_ = test_opDir_ + '/ROC.png'
+        PerformanceMetrics().plot_roc(FPR_, TPR_, roc_opFile_)

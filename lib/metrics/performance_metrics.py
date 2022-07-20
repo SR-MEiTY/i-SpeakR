@@ -84,10 +84,10 @@ class PerformanceMetrics:
 
         Parameters
         ----------
-        fpr : 1D array
-            False Positive Rate.
-        tpr : 1D array
-            True Positive Rate.
+        fpr : dict
+            Dictionary variable containing duration wise False Positive Rate.
+        tpr : dict
+            Dictionary variable containing duration wise True Positive Rate.
         opFile : str
             Path to save the figure.
 
@@ -96,7 +96,11 @@ class PerformanceMetrics:
         None.
 
         '''
-        plt.plot(fpr, tpr)
+        legend_text_ = []
+        for dur_ in fpr.keys():
+            plt.plot(fpr[dur_], tpr[dur_])
+            legend_text_.append(str(dur_)+'s')
+        plt.legend(legend_text_)
         plt.title('ROC')
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')

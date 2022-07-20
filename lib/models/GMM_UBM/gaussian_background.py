@@ -523,9 +523,6 @@ class GaussianBackground:
             'eer': EER_,
             'eer_threshold': EER_thresh_,
             }
-
-        roc_opFile = opDir + '/ROC_' + str(duration) + 's.png'
-        PerformanceMetrics().plot_roc(metrics_['fpr'], metrics_['tpr'], roc_opFile)
             
         print(f'\n\nUtterance duration: {duration}s:\n__________________________________________')
         print(f"\tAccuracy: {np.round(metrics_['accuracy']*100,2)}")
