@@ -17,7 +17,7 @@ class ChopUtterances:
     SAMPLING_RATE = 0
     FRAME_LENGTH = 0
     HOP_LENGTH = 0
-    SPLITS_DIR = ''
+    DATA_INFO_DIR = ''
     DEV_CHOP_SIZE = []
     ENR_CHOP_SIZE = []
     TEST_CHOP_SIZE = []
@@ -29,9 +29,7 @@ class ChopUtterances:
         self.SAMPLING_RATE = config['SAMPLING_RATE']
         self.FRAME_LENGTH = int(config['FRAME_SIZE']*self.SAMPLING_RATE/1000)
         self.HOP_LENGTH = int(config['FRAME_SHIFT']*self.SAMPLING_RATE/1000)
-        self.SPLITS_DIR = config['OUTPUT_DIR'] + '/sub_utterance_info/'
-        if not os.path.exists(self.SPLITS_DIR):
-            os.makedirs(self.SPLITS_DIR)
+        self.DATA_INFO_DIR = config['DATA_INFO_DIR']
             
             
     def get_non_silence_intervals(self, file_path):
@@ -88,7 +86,15 @@ class ChopUtterances:
             with open(opFile, 'a+', encoding='utf8') as fid_:
                 writer_ = csv.writer(fid_)
                 # The csv file has four columns
-                writer_.writerow(['split_id', 'first_sample', 'last_sample', 'duration'])
+                writer_.writerow([
+                    'speaker_id',
+                    'utterance_id',
+                    'split_id', 
+                    'first_sample', 
+                    'last_sample', 
+                    'duration',
+                    'wav_path',
+                    ])
         
         
     def create_splits(self, meta_info, path):
@@ -120,6 +126,10 @@ class ChopUtterances:
 
         '''
         for data_type_ in meta_info.keys():
+            opFile_ = self.DATA_INFO_DIR + '/' + data_type_
+            if os.path.exists(opFile_):
+                continue
+
             chop_size_ = None
             if data_type_.startswith('DEV'):
                 chop_size_ = self.DEV_CHOP_SIZE
@@ -134,17 +144,9 @@ class ChopUtterances:
                 # print(f'{data_type_} {utterance_id_} ({utter_count}/{len(meta_info[data_type_].keys())})')
                 fName_ = meta_info[data_type_][utterance_id_]['wav_path'].split('/')[-1]
                 data_path_ = path + '/' + meta_info[data_type_][utterance_id_]['wav_path']
+                speaker_id_ = meta_info[data_type_][utterance_id_]['speaker_id']
                 if not os.path.exists(data_path_):
                     print('\tWAV file does not exist ', data_path_)
-                    continue
-                
-                # Create the output directory to store the chop details csv files
-                opDir_path_ = self.SPLITS_DIR + '/' + '/'.join(meta_info[data_type_][utterance_id_]['wav_path'].split('/')[:-1])
-                if not os.path.exists(opDir_path_):
-                    os.makedirs(opDir_path_)
-                opFile_ = opDir_path_ + '/' + fName_.split('.')[0] + '.csv'
-                if os.path.exists(opFile_):
-                    # print(f'\t{fName_} chopping details already stored')
                     continue
                 
                 nonsil_intervals_, nSamples_ = self.get_non_silence_intervals(data_path_)
@@ -163,7 +165,15 @@ class ChopUtterances:
                             with open(opFile_, 'a+', encoding='utf8') as fid_:
                                 writer_ = csv.writer(fid_)
                                 split_id_ = utterance_id_ + '_' + str(spldur_) + '_' + format(seg_count_, '03d')
-                                writer_.writerow([split_id_, smpStart_, smpEnd_, np.round((smpEnd_-smpStart_)/self.SAMPLING_RATE,2)])
+                                writer_.writerow([
+                                    speaker_id_,
+                                    utterance_id_,
+                                    split_id_, 
+                                    smpStart_, 
+                                    smpEnd_, 
+                                    np.round((smpEnd_-smpStart_)/self.SAMPLING_RATE,2),
+                                    data_path_
+                                    ])
                             seg_count_ += 1
                             smpStart_ = smpEnd_
                         else:

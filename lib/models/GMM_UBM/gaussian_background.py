@@ -79,11 +79,11 @@ class GaussianBackground:
         print(f'Available RAM: {ram_mem_avail_} MB')
         
         if isinstance(X_combined_, np.float32):
-            ram_mem_req_ = 2*(np.product(np.shape(X_combined_))*4 + np.shape(X_combined_)[0]*self.NCOMP*4) >> 20
+            ram_mem_req_ = 2*(np.size(X_combined_)*4 + np.shape(X_combined_)[0]*self.NCOMP*4) >> 20
         elif isinstance(X_combined_, np.float64):
-            ram_mem_req_ = 2*(np.product(np.shape(X_combined_))*8 + np.shape(X_combined_)[0]*self.NCOMP*8) >> 20
+            ram_mem_req_ = 2*(np.size(X_combined_)*8 + np.shape(X_combined_)[0]*self.NCOMP*8) >> 20
         else:
-            ram_mem_req_ = 2*(np.product(np.shape(X_combined_))*8 + np.shape(X_combined_)[0]*self.NCOMP*8) >> 20
+            ram_mem_req_ = 2*(np.size(X_combined_)*8 + np.shape(X_combined_)[0]*self.NCOMP*8) >> 20
         print(f'RAM required: {ram_mem_req_} MB')
 
         if ram_mem_req_>ram_mem_avail_:
@@ -461,7 +461,7 @@ class GaussianBackground:
         return scores_
     
     
-    def evaluate_performance(self, res):
+    def evaluate_performance(self, res, opDir, duration):
         '''
         Compute performance metrics.
 
@@ -471,10 +471,12 @@ class GaussianBackground:
             Dictionary containing the sub-utterance wise scores.
         opDir : str
             Output path.
+        duration : int
+            Duration of the testing utterance.
 
         Returns
         -------
-        Metrics_ : dict
+        metrics_ : dict
             Disctionary containg the various evaluation metrics:
                 accuracy, precision, recall, f1-score, eer
 
@@ -511,7 +513,7 @@ class GaussianBackground:
 
         FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(groundtruth_scores_.flatten(), predicted_scores_.flatten())
                 
-        Metrics_ = {
+        metrics_ = {
             'accuracy': acc_,
             'precision': precision_,
             'recall': recall_,
@@ -521,5 +523,23 @@ class GaussianBackground:
             'eer': EER_,
             'eer_threshold': EER_thresh_,
             }
+
+        roc_opFile = opDir + '/ROC_' + str(duration) + 's.png'
+        PerformanceMetrics().plot_roc(metrics_['fpr'], metrics_['tpr'], roc_opFile)
+            
+        print(f'\n\nUtterance duration: {duration}s:\n__________________________________________')
+        print(f"\tAccuracy: {np.round(metrics_['accuracy']*100,2)}")
+        print(f"\tMacro Average Precision: {np.round(metrics_['precision']*100,2)}")
+        print(f"\tMacro Average Recall: {np.round(metrics_['recall']*100,2)}")
+        print(f"\tMacro Average F1-score: {np.round(metrics_['f1-score']*100,2)}")
+        print(f"\tEER: {np.round(np.mean(metrics_['eer'])*100,2)}")
+
+        with open(opDir+'/Performance.txt', 'a+') as f_:
+            f_.write(f'Utterance duration: {duration}s:\n__________________________________________\n')
+            f_.write(f"\tAccuracy: {np.round(metrics_['accuracy']*100,2)}\n")
+            f_.write(f"\tMacro Average Precision: {np.round(metrics_['precision']*100,2)}\n")
+            f_.write(f"\tMacro Average Recall: {np.round(metrics_['recall']*100,2)}\n")
+            f_.write(f"\tMacro Average F1-score: {np.round(metrics_['f1-score']*100,2)}\n")
+            f_.write(f"\tEER: {np.round(np.mean(metrics_['eer'])*100,2)}\n\n")
         
-        return Metrics_
+        return metrics_
