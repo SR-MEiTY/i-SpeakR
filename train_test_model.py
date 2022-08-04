@@ -10,6 +10,7 @@ Created on Wed Jul 20 18:16:13 2022
 from lib.feature_computation.compute_mfcc import MFCC
 from lib.feature_computation.load_features import LoadFeatures
 from lib.models.GMM_UBM.gaussian_background import GaussianBackground
+from lib.models.IVector.ivector_extraction import IVector
 from lib.metrics.performance_metrics import PerformanceMetrics
 import os
 import pickle
@@ -18,63 +19,45 @@ import argparse
 import json
 
 
-def __init__():
-    '''
-    This function initiates the i-SpeakR system with the environment settings.
 
-    Returns
-    -------
-    args : namespace
-        This namespace contains the environment variables as attributes to 
-        run the experiments.
 
-    '''
-    # Setting up the argparse object
-    parser = argparse.ArgumentParser(
-        prog='i-SpeakR',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description='SPEECH TECHNOLOGIES IN INDIAN LANGUAGES\n-----------------------------------------\nDeveloping Speaker Recognition systems for Indian scenarios',
-        epilog='The above syntax needs to be strictly followed.',
-        )
-    # Adding the version information of the i-SpeakR toolkit
-    parser.add_argument('-v', '--version', action='version', version='%(prog)s 0.1.1')
-    # Adding a switch for the path to a csv file containing the meta information of the dataset
-    # Adding switch to indicate the type of data
-    parser.add_argument(
-        '--model_type',
-        type=str,
-        choices=['GMM-UBM'],
-        default='GMM-UBM',
-        help='Currently supports only GMM-UBM model',
-        required=True,
-        )
-    args = parser.parse_args()
-    
-    return args
+'''
+I-Vector :: Speaker Verification System
+'''
+def ivector_sv(PARAMS):
+        IVec_ = IVector(
+            model_dir=PARAMS['model_dir'], 
+            opDir=PARAMS['output_dir'],
+            num_mixtures=int(PARAMS['ubm_ncomponents']), 
+            feat_scaling=int(PARAMS['feature_scaling'])
+            )
+        
+        '''
+        Training the GMM-UBM model
+        '''
+        ubm_fName = PARAMS['model_dir'] + '/ubm.pkl'
+        if not os.path.exists(ubm_fName):
+            FV_dev_ = LoadFeatures(
+                info=feat_info_[PARAMS['dev_set']], 
+                feature_name=PARAMS['feature_name']
+                ).load(dim=int(PARAMS['num_dim']))
+            IVec_.train_ubm(
+                FV_dev_, 
+                cov_type=PARAMS['covariance_type']
+                )
+        else:
+            print('The GMM-UBM is already available')
+        print('\n\n')
 
 
 
-    
-if __name__ == '__main__':
-    args = __init__()
-    
-    base_config = configparser.ConfigParser()
-    base_config.read('config.ini')
-    opDir_ = base_config['MAIN']['output_path'] + '/i-SpeakR_output/' + base_config['MAIN']['dataset_name'] + '/'
 
-    PARAMS = configparser.ConfigParser()
-    PARAMS.read(opDir_+'/setup.ini')
-    PARAMS = PARAMS['EXECUTION_SETUP']    
-    
-    print('Feature details..')
-    if PARAMS['feature_name']=='MFCC':
-        feat_info_ = MFCC(config=PARAMS).get_feature_details()
-    
-    
-    '''
-    Training and testing for GMM-UBM based speaker verification system
-    '''
-    if args.model_type=='GMM-UBM':    
+
+
+'''
+GMM-UBM :: Speaker Verification System
+'''
+def gmm_ubm_sv(PARAMS):
         GB_ = GaussianBackground(
             model_dir=PARAMS['model_dir'], 
             opDir=PARAMS['output_dir'],
@@ -170,3 +153,65 @@ if __name__ == '__main__':
                 
         roc_opFile_ = test_opDir_ + '/ROC.png'
         PerformanceMetrics().plot_roc(FPR_, TPR_, roc_opFile_)
+
+
+
+
+def __init__():
+    '''
+    This function initiates the i-SpeakR system with the environment settings.
+
+    Returns
+    -------
+    args : namespace
+        This namespace contains the environment variables as attributes to 
+        run the experiments.
+
+    '''
+    # Setting up the argparse object
+    parser = argparse.ArgumentParser(
+        prog='i-SpeakR',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description='SPEECH TECHNOLOGIES IN INDIAN LANGUAGES\n-----------------------------------------\nDeveloping Speaker Recognition systems for Indian scenarios',
+        epilog='The above syntax needs to be strictly followed.',
+        )
+    # Adding the version information of the i-SpeakR toolkit
+    parser.add_argument('-v', '--version', action='version', version='%(prog)s 0.1.1')
+    # Adding a switch for the path to a csv file containing the meta information of the dataset
+    # Adding switch to indicate the type of data
+    parser.add_argument(
+        '--model_type',
+        type=str,
+        choices=['GMM-UBM'],
+        default='GMM-UBM',
+        help='Currently supports only GMM-UBM model',
+        required=True,
+        )
+    args = parser.parse_args()
+    
+    return args
+
+
+
+    
+if __name__ == '__main__':
+    args = __init__()
+    
+    base_config = configparser.ConfigParser()
+    base_config.read('config.ini')
+    opDir_ = base_config['MAIN']['output_path'] + '/i-SpeakR_output/' + base_config['MAIN']['dataset_name'] + '/'
+
+    PARAMS = configparser.ConfigParser()
+    PARAMS.read(opDir_+'/setup.ini')
+    PARAMS = PARAMS['EXECUTION_SETUP']    
+    
+    print('Feature details..')
+    if PARAMS['feature_name']=='MFCC':
+        feat_info_ = MFCC(config=PARAMS).get_feature_details()
+    
+    
+    if args.model_type=='GMM-UBM':    
+        gmm_ubm_sv(PARAMS)
+        
+    if args.model_type=='I-Vector':    
+        ivector_sv(PARAMS)        
