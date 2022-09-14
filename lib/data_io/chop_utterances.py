@@ -148,11 +148,29 @@ class ChopUtterances:
                 if not os.path.exists(data_path_):
                     print('\tWAV file does not exist ', data_path_)
                     continue
-                
+
                 nonsil_intervals_, nSamples_ = self.get_non_silence_intervals(data_path_)
+
+                self.add_header(opFile_)
+
+                # If spldur_=='x', chopping is not done
+                if 'x' in chop_size_:
+                    with open(opFile_, 'a+', encoding='utf8') as fid_:
+                        writer_ = csv.writer(fid_)
+                        split_id_ = utterance_id_ + '_x_000'
+                        writer_.writerow([
+                            speaker_id_,
+                            utterance_id_,
+                            split_id_, 
+                            0, 
+                            nSamples_, 
+                            np.round(nSamples_/self.SAMPLING_RATE,2),
+                            data_path_
+                            ])
+                    print(f'\t{fName_} not chopped')
+                    continue                    
                     
                 # Compute the sub-utterances and store the details in csv files
-                self.add_header(opFile_)
                 for spldur_ in chop_size_:
                     seg_count_ = 1
                     smpStart_ = 0
@@ -161,6 +179,7 @@ class ChopUtterances:
                         smpEnd_ = nonsil_intervals_[intvl_i_,1]
                         if intvl_i_==np.shape(nonsil_intervals_)[0]:
                             smpEnd_ = nSamples_
+
                         if ((smpEnd_-smpStart_)/self.SAMPLING_RATE>spldur_) or (smpEnd_==nSamples_):
                             with open(opFile_, 'a+', encoding='utf8') as fid_:
                                 writer_ = csv.writer(fid_)
