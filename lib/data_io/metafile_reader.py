@@ -15,7 +15,8 @@ import collections
 
 class GetMetaInfo:
     DATA_INFO = ''
-    DATA_PATH = ''
+    PATH = ''
+    KEY = ''
     INFO = {}
     DURATION_FLAG = False
     GENDER_FLAG = False
@@ -27,7 +28,7 @@ class GetMetaInfo:
         PATH_DELIM = '\\'
     
 
-    def __init__(self, data_info, path, duration=True, gender=True):
+    def __init__(self, data_info, path, key, duration=False, gender=False):
         '''
         This function initializes the ReadMetaFile object
 
@@ -50,18 +51,18 @@ class GetMetaInfo:
         self.DURATION_FLAG = duration
         self.GENDER_FLAG = gender
         self.DATA_INFO = data_info
+        self.PATH = path
+        self.KEY = key
         if self.DATA_INFO=='specify':
-            self.DATA_PATH = path
             self.read_info()
-            if self.DURATION_FLAG:
-                for set_name_ in self.INFO.keys():
-                    self.TOTAL_DURATION[set_name_] = self.get_total_duration(set_name_)
-            if self.GENDER_FLAG:
-                for set_name_ in self.INFO.keys():
-                    self.GENDER_DISTRIBUTION[set_name_] = self.get_gender_dist(set_name_)
+            # if self.DURATION_FLAG:
+            #     for set_name_ in self.INFO.keys():
+            #         self.TOTAL_DURATION[set_name_] = self.get_total_duration(set_name_)
+            # if self.GENDER_FLAG:
+            #     for set_name_ in self.INFO.keys():
+            #         self.GENDER_DISTRIBUTION[set_name_] = self.get_gender_dist(set_name_)
 
         elif self.DATA_INFO=='infer':
-            self.DATA_PATH = path
             self.get_info()
             
 
@@ -77,21 +78,66 @@ class GetMetaInfo:
         None.
 
         '''
-        csv_files_ = [f_.split(self.PATH_DELIM)[-1] for f_ in librosa.util.find_files(self.DATA_PATH, ext=['csv'], recurse=False)] # recurse=False added on 12-06-22
-        for f_ in csv_files_:
-            self.INFO[f_] = {}
-            with open(self.DATA_PATH + '/' + f_, 'r' ) as meta_file_:
-                reader_ = csv.DictReader(meta_file_)
-                for row_ in reader_:
-                    utterance_id_ = row_['utterance_id']
-                    if utterance_id_=='':
-                        continue
-                    del row_['utterance_id']
-                    if os.name=='posix': # Linux
-                        row_['wav_path'] = '/'.join(row_['wav_path'].split('\\'))
-                    elif os.name=='nt': # Windows
-                        row_['wav_path'] = row_['wav_path'].replace('/', '\\')
-                    self.INFO[f_][utterance_id_] = row_
+        # csv_files_ = [f_.split(self.PATH_DELIM)[-1] for f_ in librosa.util.find_files(self.DATA_PATH, ext=['csv'], recurse=False)] # recurse=False added on 12-06-22
+        # for f_ in csv_files_:
+        #     self.INFO[f_] = {}
+            # with open(self.DATA_PATH + '/' + f_, 'r' ) as meta_file_:
+            #     reader_ = csv.DictReader(meta_file_)
+            #     for row_ in reader_:
+            #         utterance_id_ = row_['utterance_id']
+            #         if utterance_id_=='':
+            #             continue
+            #         del row_['utterance_id']
+            #         if os.name=='posix': # Linux
+            #             row_['wav_path'] = '/'.join(row_['wav_path'].split('\\'))
+            #         elif os.name=='nt': # Windows
+            #             row_['wav_path'] = row_['wav_path'].replace('/', '\\')
+            #         self.INFO[f_][utterance_id_] = row_
+
+        self.INFO['DEV'] = {}
+        with open(self.KEY['DEV'], 'r' ) as meta_file_:
+            reader_ = csv.DictReader(meta_file_)
+            for row_ in reader_:
+                utterance_id_ = row_['utterance_id']
+                if utterance_id_=='':
+                    continue
+                del row_['utterance_id']
+                if os.name=='posix': # Linux
+                    row_['wav_path'] = '/'.join(self.PATH['DEV'].split('\\'))
+                elif os.name=='nt': # Windows
+                    row_['wav_path'] = self.PATH['DEV'].replace('/', '\\')
+                row_['wav_path'] += '/' + utterance_id_ + '.wav'
+                self.INFO['DEV'][utterance_id_] = row_
+
+        self.INFO['ENR'] = {}
+        with open(self.KEY['ENR'], 'r' ) as meta_file_:
+            reader_ = csv.DictReader(meta_file_)
+            for row_ in reader_:
+                utterance_id_ = row_['utterance_id']
+                if utterance_id_=='':
+                    continue
+                del row_['utterance_id']
+                if os.name=='posix': # Linux
+                    row_['wav_path'] = '/'.join(self.PATH['ENR'].split('\\'))
+                elif os.name=='nt': # Windows
+                    row_['wav_path'] = self.PATH['ENR'].replace('/', '\\')
+                row_['wav_path'] += '/' + utterance_id_ + '.wav'
+                self.INFO['ENR'][utterance_id_] = row_
+
+        self.INFO['TEST'] = {}
+        with open(self.KEY['TEST'], 'r' ) as meta_file_:
+            reader_ = csv.DictReader(meta_file_)
+            for row_ in reader_:
+                utterance_id_ = row_['utterance_id']
+                if utterance_id_=='':
+                    continue
+                del row_['utterance_id']
+                if os.name=='posix': # Linux
+                    row_['wav_path'] = '/'.join(self.PATH['TEST'].split('\\'))
+                elif os.name=='nt': # Windows
+                    row_['wav_path'] = self.PATH['TEST'].replace('/', '\\')
+                row_['wav_path'] += '/' + utterance_id_ + '.wav'
+                self.INFO['TEST'][utterance_id_] = row_
     
     
     def get_info(self):
@@ -115,8 +161,8 @@ class GetMetaInfo:
             print('DEV folder does not exist')
             return
         self.INFO['DEV'] = {}
-        for speaker_id_ in next(os.walk(self.DATA_PATH+'/DEV/'))[1]:
-            for f_ in librosa.util.find_files(self.DATA_PATH + '/DEV/' + speaker_id_ + '/'):
+        for speaker_id_ in next(os.walk(self.PATH['DEV']))[1]:
+            for f_ in librosa.util.find_files(self.PATH['DEV'] + speaker_id_ + '/'):
                 f_splits_ = f_.split('/')
                 part_path_start = np.squeeze(np.where(np.array(f_splits_)=='DEV'))
                 f_part_ = '/'.join(f_splits_[part_path_start:])
@@ -127,12 +173,12 @@ class GetMetaInfo:
         if self.DURATION_FLAG:
             self.TOTAL_DURATION['DEV'] = self.get_total_duration('DEV')
             
-        if not os.path.exists(self.DATA_PATH+'/ENR/'):
+        if not os.path.exists(self.PATH['ENR']):
             print('ENR folder does not exist')
             return
         self.INFO['ENR'] = {}
-        for speaker_id_ in next(os.walk(self.DATA_PATH+'/ENR/'))[1]:
-            for f_ in librosa.util.find_files(self.DATA_PATH+'/ENR/'+speaker_id_+'/'):
+        for speaker_id_ in next(os.walk(self.PATH['ENR']))[1]:
+            for f_ in librosa.util.find_files(self.PATH['ENR'] + speaker_id_+'/'):
                 f_splits_ = f_.split('/')
                 part_path_start = np.squeeze(np.where(np.array(f_splits_)=='ENR'))
                 f_part_ = '/'.join(f_splits_[part_path_start:])
@@ -143,12 +189,12 @@ class GetMetaInfo:
         if self.DURATION_FLAG:
             self.TOTAL_DURATION['ENR'] = self.get_total_duration('ENR')
 
-        if not os.path.exists(self.DATA_PATH+'/TEST/'):
+        if not os.path.exists(self.PATH['TEST']):
             print('TEST folder does not exist')
             return
         self.INFO['TEST'] = {}
-        for speaker_id_ in next(os.walk(self.DATA_PATH+'/TEST/'))[1]:
-            for f_ in librosa.util.find_files(self.DATA_PATH+'/TEST/'+speaker_id_+'/'):
+        for speaker_id_ in next(os.walk(self.PATH['TEST']))[1]:
+            for f_ in librosa.util.find_files(self.PATH['TEST'] + speaker_id_+'/'):
                 f_splits_ = f_.split('/')
                 part_path_start = np.squeeze(np.where(np.array(f_splits_)=='TEST'))
                 f_part_ = '/'.join(f_splits_[part_path_start:])
@@ -160,64 +206,64 @@ class GetMetaInfo:
             self.TOTAL_DURATION['TEST'] = self.get_total_duration('TEST')
 
 
-    def get_total_duration(self, set_name):
-        '''
-        Compute the duration distribution of the files in the list.
+    # def get_total_duration(self, set_name):
+    #     '''
+    #     Compute the duration distribution of the files in the list.
 
-        Returns
-        -------
-        None.
+    #     Returns
+    #     -------
+    #     None.
 
-        '''
-        if len(self.INFO[set_name])==0:
-            if self.DATA_INFO=='specify':
-                self.read_info()
-            elif self.DATA_INFO=='infer':
-                self.get_info()
+    #     '''
+    #     if len(self.INFO[set_name])==0:
+    #         if self.DATA_INFO=='specify':
+    #             self.read_info()
+    #         elif self.DATA_INFO=='infer':
+    #             self.get_info()
 
-        hours_ = 0
-        minutes_ = 0
-        seconds_ = 0
-        for utterance_id_ in self.INFO[set_name].keys():
-            try:
-                dur = datetime.strptime(self.INFO[set_name][utterance_id_]['Duration'], '%H:%M:%S').time()
-                hours_ += dur.hour
-                minutes_ += dur.minute
-                seconds_ += dur.second
-            except:
-                Xin_, fs_ = librosa.load(self.DATA_PATH+'/'+self.INFO[set_name][utterance_id_]['wav_path'], mono=True)
-                seconds_ += int(len(Xin_)/fs_)
+    #     hours_ = 0
+    #     minutes_ = 0
+    #     seconds_ = 0
+    #     for utterance_id_ in self.INFO[set_name].keys():
+    #         try:
+    #             dur = datetime.strptime(self.INFO[set_name][utterance_id_]['Duration'], '%H:%M:%S').time()
+    #             hours_ += dur.hour
+    #             minutes_ += dur.minute
+    #             seconds_ += dur.second
+    #         except:
+    #             Xin_, fs_ = librosa.load(self.DATA_PATH+'/'+self.INFO[set_name][utterance_id_]['wav_path'], mono=True)
+    #             seconds_ += int(len(Xin_)/fs_)
             
-        q_, seconds_ = np.divmod(seconds_, 60)
-        minutes_ += q_
-        q_, minutes_ = np.divmod(minutes_, 60)
-        hours_ += q_
-        return {'hours':hours_, 'minutes':minutes_, 'seconds':seconds_}
+    #     q_, seconds_ = np.divmod(seconds_, 60)
+    #     minutes_ += q_
+    #     q_, minutes_ = np.divmod(minutes_, 60)
+    #     hours_ += q_
+    #     return {'hours':hours_, 'minutes':minutes_, 'seconds':seconds_}
         
         
-    def get_gender_dist(self, set_name):
-        '''
-        Compute the gender distribution of the files in the list.
+    # def get_gender_dist(self, set_name):
+    #     '''
+    #     Compute the gender distribution of the files in the list.
 
-        Returns
-        -------
-        None.
+    #     Returns
+    #     -------
+    #     None.
 
-        '''
-        m_spk_ = [] # keep track of male speaker id
-        f_spk_ = [] # keep track of female speaker id
-        if len(self.INFO[set_name])==0:
-            if self.DATA_INFO=='specify':
-                self.read_info()
-            elif self.DATA_INFO=='infer':
-                self.get_info()
+    #     '''
+    #     m_spk_ = [] # keep track of male speaker id
+    #     f_spk_ = [] # keep track of female speaker id
+    #     if len(self.INFO[set_name])==0:
+    #         if self.DATA_INFO=='specify':
+    #             self.read_info()
+    #         elif self.DATA_INFO=='infer':
+    #             self.get_info()
                 
-        for utterance_id in self.INFO[set_name].keys():
-            try:
-                if self.INFO[set_name][utterance_id]['gender']=='M':
-                    m_spk_.append(self.INFO[set_name][utterance_id]['speaker_id'])
-                if self.INFO[set_name][utterance_id]['gender']=='F':
-                    f_spk_.append(self.INFO[set_name][utterance_id]['speaker_id'])
-            except:
-                continue
-        return {'Male':len(np.unique(m_spk_)), 'Female':len(np.unique(f_spk_))}
+    #     for utterance_id in self.INFO[set_name].keys():
+    #         try:
+    #             if self.INFO[set_name][utterance_id]['gender']=='M':
+    #                 m_spk_.append(self.INFO[set_name][utterance_id]['speaker_id'])
+    #             if self.INFO[set_name][utterance_id]['gender']=='F':
+    #                 f_spk_.append(self.INFO[set_name][utterance_id]['speaker_id'])
+    #         except:
+    #             continue
+    #     return {'Male':len(np.unique(m_spk_)), 'Female':len(np.unique(f_spk_))}

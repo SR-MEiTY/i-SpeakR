@@ -134,8 +134,9 @@ def gmm_ubm_sv(PARAMS):
                 scores_ = GB_.perform_testing(
                     opDir=test_opDir_, 
                     feat_info=feat_info_[PARAMS['test_set']], 
+                    test_key=PARAMS['data_info_dir']+'/'+PARAMS['test_key'].split('/')[-1],
                     dim=int(PARAMS['num_dim']), 
-                    duration=utter_dur_
+                    duration=utter_dur_,
                     )
                 
                 with open(res_fName, 'wb') as f_:

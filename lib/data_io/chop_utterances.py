@@ -94,10 +94,11 @@ class ChopUtterances:
                     'last_sample', 
                     'duration',
                     'wav_path',
+                    'cohorts'
                     ])
         
         
-    def create_splits(self, meta_info, path):
+    def create_splits(self, meta_info, key):
         '''
         Parse the meta_info object to obtain the paths to all wav files for 
         DEV, ENR and TEST sets. Record the split durations for each wav file 
@@ -126,25 +127,31 @@ class ChopUtterances:
 
         '''
         for data_type_ in meta_info.keys():
-            opFile_ = self.DATA_INFO_DIR + '/' + data_type_
-            if os.path.exists(opFile_):
-                continue
-
             chop_size_ = None
             if data_type_.startswith('DEV'):
+                opFile_ = self.DATA_INFO_DIR + '/' + key['DEV'].split('/')[-1]
                 chop_size_ = self.DEV_CHOP_SIZE
             elif data_type_.startswith('ENR'):
+                opFile_ = self.DATA_INFO_DIR + '/' + key['ENR'].split('/')[-1]
                 chop_size_ = self.ENR_CHOP_SIZE
             elif data_type_.startswith('TEST'):
+                opFile_ = self.DATA_INFO_DIR + '/' + key['TEST'].split('/')[-1]
                 chop_size_ = self.TEST_CHOP_SIZE
+
+            if os.path.exists(opFile_):
+                continue
             
             utter_count = 0
             for utterance_id_ in meta_info[data_type_].keys():
                 utter_count += 1
                 # print(f'{data_type_} {utterance_id_} ({utter_count}/{len(meta_info[data_type_].keys())})')
                 fName_ = meta_info[data_type_][utterance_id_]['wav_path'].split('/')[-1]
-                data_path_ = path + '/' + meta_info[data_type_][utterance_id_]['wav_path']
+                data_path_ = meta_info[data_type_][utterance_id_]['wav_path']
                 speaker_id_ = meta_info[data_type_][utterance_id_]['speaker_id']
+                if data_type_.startswith('TEST'):
+                    cohorts_ = '|'.join([str(meta_info[data_type_][utterance_id_]['c'+str(i)]) for i in range(1,6)])
+                else:
+                    cohorts_ = ''
                 if not os.path.exists(data_path_):
                     print('\tWAV file does not exist ', data_path_)
                     continue
@@ -165,7 +172,8 @@ class ChopUtterances:
                             0, 
                             nSamples_, 
                             np.round(nSamples_/self.SAMPLING_RATE,2),
-                            data_path_
+                            data_path_,
+                            cohorts_
                             ])
                     print(f'\t{fName_} not chopped')
                     continue                    
@@ -191,7 +199,8 @@ class ChopUtterances:
                                     smpStart_, 
                                     smpEnd_, 
                                     np.round((smpEnd_-smpStart_)/self.SAMPLING_RATE,2),
-                                    data_path_
+                                    data_path_,
+                                    cohorts_
                                     ])
                             seg_count_ += 1
                             smpStart_ = smpEnd_

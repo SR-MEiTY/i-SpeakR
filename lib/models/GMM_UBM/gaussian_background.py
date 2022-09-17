@@ -15,6 +15,7 @@ from sklearn.preprocessing import StandardScaler
 from lib.metrics.performance_metrics import PerformanceMetrics
 import psutil
 import sys
+import csv
 
 
 class GaussianBackground:
@@ -233,7 +234,7 @@ class GaussianBackground:
             print(f'Adapted GMM model saved for speaker={speaker_id_}')
             
             
-    def perform_testing(self, opDir, X_TEST=None, feat_info=None, dim=None, duration=None):
+    def perform_testing(self, opDir, feat_info, test_key, dim=None, duration=None, X_TEST=None):
         '''
         Compute test speaker scores against all enrollment speaker models.
 
@@ -241,15 +242,17 @@ class GaussianBackground:
         ----------
         opDir : str
             Output path.
-        X_TEST : dict, optional
-            Dictionary containing the speaker-wise test data.
-        feat_info : dict, optional
+        feat_info : dict
             Dictionary containing info about feature paths.
+        test_key : str
+            Path to compiled test data information.
         dim : int, optional
             Dimension of input feature.
         duration : str, optional
             Selection of which utterance duration to test. Default, tests all
             utterances.
+        X_TEST : dict, optional
+            Dictionary containing the speaker-wise test data.
 
         Returns
         -------
@@ -318,136 +321,158 @@ class GaussianBackground:
                             continue
                     speaker_id_list_.append(feat_info[split_id_]['speaker_id'])
                     total_splits_ += 1
-
+                    
+                
                 split_count_ = 0
-                for split_id_ in feat_info.keys():
-                    '''
-                    Checking duration of utterance
-                    '''
-                    if duration:
-                        if not split_id_.split('_')[-2]==str(duration):
-                            continue
-                    split_count_ += 1
-    
-                    speaker_id_ = feat_info[split_id_]['speaker_id']
-                    feature_path_ = feat_info[split_id_]['file_path']
-                    fv_ = None
-                    del fv_
-                    fv_ = np.load(feature_path_, allow_pickle=True)
-                    # The feature vectors must be stored as individual rows in the 2D array
-                    if dim:
-                        if np.shape(fv_)[0]==dim:
-                            fv_ = fv_.T
-                    elif np.shape(fv_)[1]>np.shape(fv_)[0]:
-                        fv_ = fv_.T
-    
-                    ''' Feature Scaling '''
-                    if self.FEATURE_SCALING>0:
-                        fv_ = self.SCALER.transform(fv_)
-                        fv_ = fv_.astype(np.float32)
-                        
-                    llr_scores_ = np.zeros(len(enr_speaker_model_))
-                    matched_speaker_id_ = ''
-                    bg_model_scores_ = np.array(self.BACKGROUND_MODEL.score_samples(fv_))
-                    for index_i_ in enr_speaker_model_.keys():
-                        spk_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
-                        llr_scores_[index_i_] = np.mean(np.subtract(spk_model_scores_,  bg_model_scores_))
-                    map_idx_ = np.argmax(llr_scores_)
-                    matched_speaker_id_ = enr_speaker_model_[map_idx_]['speaker_id']
-                    match_count_[map_idx_] += 1
-                    
-                    scores_[split_id_] = {
-                        'index': map_idx_,
-                        'speaker_id':speaker_id_, 
-                        'llr_scores': llr_scores_, 
-                        'matched_speaker':matched_speaker_id_,
-                        'enrolled_speakers': enrolled_speakers_,
-                        }
-                    
-                    lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_)))
-                    lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
-                    confusion_matrix_[lab_true_, lab_pred_] += 1
-
-                    true_lab_.append(str(speaker_id_))
-                    pred_lab_.append(str(matched_speaker_id_))
-                    accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
-
-                    '''
-                    Displaying progress
-                    '''
-                    # sys.stdout.write('\033[2K\033[1G')
-                    print(f'\t{split_id_}', end='\t', flush=True)
-                    print(f'splits=({split_count_}/{total_splits_})', end='\t', flush=True)
-                    print(f'true=({speaker_id_})', end='\t', flush=True)
-                    print(f'pred=({matched_speaker_id_})', end='\t', flush=True)
-                    print(f'accuracy={accuracy_}%', end='\n', flush=True)
-                    
-                np.save(opDir+'/Confusion_Matrix_'+str(duration)+'s.npy', confusion_matrix_)
-
-
-            if not feat_info:
-                ''' 
-                Testing each sub-utterance with each speaker model 
-                '''
-                speaker_count_ = 0
-                num_speakers_ = len(X_TEST.keys())
-
-                for speaker_id_i_ in X_TEST.keys():
-                    speaker_count_ += 1
-                    split_count_ = 0
-                    num_splits_ = len(X_TEST[speaker_id_i_].keys())
-                    for split_id_ in X_TEST[speaker_id_i_].keys():
+                with open(test_key, 'r' ) as test_meta_info_:
+                    reader_ = csv.DictReader(test_meta_info_)
+                    for row_ in reader_:
+                        split_id_ = row_['split_id']
+                        cohort_speakers_ = row_['cohorts'].split('|')
+                                
+                        # if duration:
+                        #     if not split_id_.split('_')[-2]==str(duration):
+                        #         continue
                         split_count_ += 1
-                        
-                        '''
-                        Checking duration of utterance
-                        '''
-                        if duration:
-                            if not split_id_.split('_')[-2]==str(duration):
-                                continue
-                        
+        
+                        speaker_id_ = feat_info[split_id_]['speaker_id']
+                        feature_path_ = feat_info[split_id_]['file_path']
                         fv_ = None
                         del fv_
-                        fv_ = X_TEST[speaker_id_i_][split_id_]
-                    
+                        fv_ = np.load(feature_path_, allow_pickle=True)
+                        # The feature vectors must be stored as individual rows in the 2D array
+                        if dim:
+                            if np.shape(fv_)[0]==dim:
+                                fv_ = fv_.T
+                        elif np.shape(fv_)[1]>np.shape(fv_)[0]:
+                            fv_ = fv_.T
+        
                         ''' Feature Scaling '''
                         if self.FEATURE_SCALING>0:
                             fv_ = self.SCALER.transform(fv_)
-                        
-                        llr_scores_ = np.zeros(len(enr_speaker_model_))
+                            fv_ = fv_.astype(np.float32)
+                            
+                        llr_scores_ = {}
                         bg_model_scores_ = np.array(self.BACKGROUND_MODEL.score_samples(fv_))
+                        
+                        # matched_speaker_id_ = ''
+                        # for index_i_ in enr_speaker_model_.keys():
+                        #     spk_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
+                        #     llr_scores_[index_i_] = np.mean(np.subtract(spk_model_scores_,  bg_model_scores_))
+                        # map_idx_ = np.argmax(llr_scores_)
+                        # matched_speaker_id_ = enr_speaker_model_[map_idx_]['speaker_id']
+                        # match_count_[map_idx_] += 1
+
                         for index_i_ in enr_speaker_model_.keys():
-                            spk_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
-                            llr_scores_[index_i_] = np.mean(np.subtract(spk_model_scores_, bg_model_scores_))
-                        map_idx_ = np.argmax(llr_scores_)
-                        matched_speaker_id_ = enr_speaker_model_[map_idx_]['speaker_id']
+                            if enr_speaker_model_[index_i_]['speaker_id'] not in cohort_speakers_:
+                                continue
+                            else:
+                                spk_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
+                            llr_scores_[enr_speaker_model_[index_i_]['speaker_id']] = np.mean(np.subtract(spk_model_scores_,  bg_model_scores_))
+                        
                         scores_[split_id_] = {
-                            'index': map_idx_,
-                            'speaker_id':speaker_id_i_, 
-                            'llr_scores': llr_scores_,
-                            'matched_speaker':matched_speaker_id_,
+                            # 'index': map_idx_,
+                            'speaker_id':speaker_id_, 
+                            'llr_scores': llr_scores_, 
+                            # 'matched_speaker':matched_speaker_id_,
                             'enrolled_speakers': enrolled_speakers_,
                             }
-                        
-                        lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_i_)))
-                        lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
-                        confusion_matrix_[lab_true_, lab_pred_] += 1
-                        true_lab_.append(lab_true_)
-                        pred_lab_.append(lab_pred_)
-                        accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
 
+                        for cohort_id_ in llr_scores_.keys():
+                            output_fName_ = opDir+'/'+test_key.split('/')[-1].split('.')[0]+'_predictions.csv'
+                            with open(output_fName_, 'a+', encoding='utf8') as fid_:
+                                writer_ = csv.writer(fid_)
+                                writer_.writerow([
+                                    row_['utterance_id'],
+                                    cohort_id_, 
+                                    llr_scores_[cohort_id_], 
+                                    ])
+                        
+                        # lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_)))
+                        # lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
+                        # confusion_matrix_[lab_true_, lab_pred_] += 1
+    
+                        # true_lab_.append(str(speaker_id_))
+                        # pred_lab_.append(str(matched_speaker_id_))
+                        # accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
+    
                         '''
                         Displaying progress
                         '''
-                        sys.stdout.write('\033[2K\033[1G')
+                        # sys.stdout.write('\033[2K\033[1G')
                         print(f'\t{split_id_}', end='\t', flush=True)
-                        print(f'speakers=({speaker_count_}/{num_speakers_})', end='\t', flush=True)
-                        print(f'splits=({split_count_}/{num_splits_})', end='\t', flush=True)
-                        print(f'true={speaker_id_i_} ({lab_true_})', end='\t', flush=True)
-                        print(f'pred={matched_speaker_id_} ({lab_pred_})', end='\t', flush=True)
-                        print(f'accuracy={accuracy_}%', end='\n', flush=True)
+                        print(f'splits=({split_count_}/{total_splits_})', end='\t', flush=True)
+                        print(f'true=({speaker_id_})', end='\t', flush=True)
+                        # print(f'pred=({matched_speaker_id_})', end='\t', flush=True)
+                        # print(f'accuracy={accuracy_}%', end='\n', flush=True)
+                        print(f'cohort scores={llr_scores_}', end='\n', flush=True)
+                    
+                # np.save(opDir+'/Confusion_Matrix_'+str(duration)+'s.npy', confusion_matrix_)
 
-                np.save(opDir+'/Confusion_Matrix_'+str(duration)+'s.npy', confusion_matrix_)
+
+            # if not feat_info:
+            #     ''' 
+            #     Testing each sub-utterance with each speaker model 
+            #     '''
+            #     speaker_count_ = 0
+            #     num_speakers_ = len(X_TEST.keys())
+
+            #     for speaker_id_i_ in X_TEST.keys():
+            #         speaker_count_ += 1
+            #         split_count_ = 0
+            #         num_splits_ = len(X_TEST[speaker_id_i_].keys())
+            #         for split_id_ in X_TEST[speaker_id_i_].keys():
+            #             split_count_ += 1
+                        
+            #             '''
+            #             Checking duration of utterance
+            #             '''
+            #             if duration:
+            #                 if not split_id_.split('_')[-2]==str(duration):
+            #                     continue
+                        
+            #             fv_ = None
+            #             del fv_
+            #             fv_ = X_TEST[speaker_id_i_][split_id_]
+                    
+            #             ''' Feature Scaling '''
+            #             if self.FEATURE_SCALING>0:
+            #                 fv_ = self.SCALER.transform(fv_)
+                        
+            #             llr_scores_ = np.zeros(len(enr_speaker_model_))
+            #             bg_model_scores_ = np.array(self.BACKGROUND_MODEL.score_samples(fv_))
+            #             for index_i_ in enr_speaker_model_.keys():
+            #                 spk_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
+            #                 llr_scores_[index_i_] = np.mean(np.subtract(spk_model_scores_, bg_model_scores_))
+            #             map_idx_ = np.argmax(llr_scores_)
+            #             matched_speaker_id_ = enr_speaker_model_[map_idx_]['speaker_id']
+            #             scores_[split_id_] = {
+            #                 'index': map_idx_,
+            #                 'speaker_id':speaker_id_i_, 
+            #                 'llr_scores': llr_scores_,
+            #                 'matched_speaker':matched_speaker_id_,
+            #                 'enrolled_speakers': enrolled_speakers_,
+            #                 }
+                        
+            #             lab_true_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(speaker_id_i_)))
+            #             lab_pred_ = np.squeeze(np.where(np.array(enrolled_speakers_)==str(matched_speaker_id_)))
+            #             confusion_matrix_[lab_true_, lab_pred_] += 1
+            #             true_lab_.append(lab_true_)
+            #             pred_lab_.append(lab_pred_)
+            #             accuracy_ = np.round(np.sum(np.array(true_lab_)==np.array(pred_lab_))/np.size(true_lab_)*100,2)
+
+            #             '''
+            #             Displaying progress
+            #             '''
+            #             sys.stdout.write('\033[2K\033[1G')
+            #             print(f'\t{split_id_}', end='\t', flush=True)
+            #             print(f'speakers=({speaker_count_}/{num_speakers_})', end='\t', flush=True)
+            #             print(f'splits=({split_count_}/{num_splits_})', end='\t', flush=True)
+            #             print(f'true={speaker_id_i_} ({lab_true_})', end='\t', flush=True)
+            #             print(f'pred={matched_speaker_id_} ({lab_pred_})', end='\t', flush=True)
+            #             print(f'accuracy={accuracy_}%', end='\n', flush=True)
+
+            #     np.save(opDir+'/Confusion_Matrix_'+str(duration)+'s.npy', confusion_matrix_)
 
             '''
             Saving the scores for the selected duration
@@ -481,43 +506,53 @@ class GaussianBackground:
                 accuracy, precision, recall, f1-score, eer
 
         '''
-        groundtruth_label_ = []
-        ptd_labels_ = []
+        # groundtruth_label_ = []
+        # ptd_labels_ = []
         groundtruth_scores_ = np.empty([])
         predicted_scores_ = np.empty([])
         for split_id_ in res.keys():
             true_speaker_id_ = res[split_id_]['speaker_id']
-            pred_speaker_id_ = res[split_id_]['matched_speaker']
-                        
-            true_label_ = np.squeeze(np.where(np.array(res[split_id_]['enrolled_speakers'])==str(true_speaker_id_)))
-            groundtruth_label_.append(true_label_)
-            ptd_labels_.append(np.squeeze(np.where(np.array(res[split_id_]['enrolled_speakers'])==str(pred_speaker_id_))))
-            gt_score_ = np.zeros((1,np.size(res[split_id_]['enrolled_speakers'])))
-            gt_score_[0,true_label_] = 1
-            ptd_scores_ = np.zeros((1,np.size(res[split_id_]['enrolled_speakers'])))
-            for speaker_id_ in res[split_id_]['enrolled_speakers']:
-                lab_ = np.squeeze(np.where(np.array(res[split_id_]['enrolled_speakers'])==str(speaker_id_)))
-                ptd_scores_[0,lab_] = res[split_id_]['llr_scores'][lab_]
+            # pred_speaker_id_ = res[split_id_]['matched_speaker']
+            cohort_scores_ = res[split_id_]['llr_scores']
             
-            if np.size(groundtruth_scores_)<=1:
-                groundtruth_scores_ = gt_score_
-                predicted_scores_ = ptd_scores_
-            else:
-                groundtruth_scores_ = np.append(groundtruth_scores_, gt_score_, axis=0)
-                predicted_scores_ = np.append(predicted_scores_, ptd_scores_, axis=0)
+            # true_label_ = np.squeeze(np.where(np.array(res[split_id_]['enrolled_speakers'])==str(true_speaker_id_)))
+            # groundtruth_label_.append(true_label_)
+            # ptd_labels_.append(np.squeeze(np.where(np.array(res[split_id_]['enrolled_speakers'])==str(pred_speaker_id_))))
+            # gt_score_ = np.zeros((1,np.size(res[split_id_]['enrolled_speakers'])))
+            # gt_score_[0,true_label_] = 1
+            # ptd_scores_ = np.zeros((1,np.size(res[split_id_]['enrolled_speakers'])))
+            # for speaker_id_ in res[split_id_]['enrolled_speakers']:
+            #     lab_ = np.squeeze(np.where(np.array(res[split_id_]['enrolled_speakers'])==str(speaker_id_)))
+            #     ptd_scores_[0,lab_] = res[split_id_]['llr_scores'][lab_]
+            
+            gt_score_ = []
+            ptd_scores_ = []
+            for cohort_id_ in cohort_scores_.keys():
+                if cohort_id_==true_speaker_id_:
+                    gt_score_.append(1)
+                else:
+                    gt_score_.append(0)
+                ptd_scores_.append(cohort_scores_[cohort_id_])
                 
-        all_speaker_id_ = next(os.walk(self.MODEL_DIR))[1]
-        label_list = list(range(np.size(all_speaker_id_)))
-        confmat_, precision_, recall_, fscore_ = PerformanceMetrics().compute_identification_performance(groundtruth_label_, ptd_labels_, label_list)
-        acc_ = np.sum(np.diag(confmat_))/np.sum(confmat_)
+            if np.size(groundtruth_scores_)<=1:
+                groundtruth_scores_ = np.array(gt_score_)
+                predicted_scores_ = np.array(ptd_scores_)
+            else:
+                groundtruth_scores_ = np.append(groundtruth_scores_, np.array(gt_score_), axis=0)
+                predicted_scores_ = np.append(predicted_scores_, np.array(ptd_scores_), axis=0)
+                
+        # all_speaker_id_ = next(os.walk(self.MODEL_DIR))[1]
+        # label_list = list(range(np.size(all_speaker_id_)))
+        # confmat_, precision_, recall_, fscore_ = PerformanceMetrics().compute_identification_performance(groundtruth_label_, ptd_labels_, label_list)
+        # acc_ = np.sum(np.diag(confmat_))/np.sum(confmat_)
 
-        FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(groundtruth_scores_.flatten(), predicted_scores_.flatten())
+        FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(groundtruth_scores_, predicted_scores_)
                 
         metrics_ = {
-            'accuracy': acc_,
-            'precision': precision_,
-            'recall': recall_,
-            'f1-score': fscore_,
+            # 'accuracy': acc_,
+            # 'precision': precision_,
+            # 'recall': recall_,
+            # 'f1-score': fscore_,
             'fpr': FPR_,
             'tpr': TPR_,
             'eer': EER_,
@@ -525,18 +560,18 @@ class GaussianBackground:
             }
             
         print(f'\n\nUtterance duration: {duration}s:\n__________________________________________')
-        print(f"\tAccuracy: {np.round(metrics_['accuracy']*100,2)}")
-        print(f"\tMacro Average Precision: {np.round(metrics_['precision']*100,2)}")
-        print(f"\tMacro Average Recall: {np.round(metrics_['recall']*100,2)}")
-        print(f"\tMacro Average F1-score: {np.round(metrics_['f1-score']*100,2)}")
+        # print(f"\tAccuracy: {np.round(metrics_['accuracy']*100,2)}")
+        # print(f"\tMacro Average Precision: {np.round(metrics_['precision']*100,2)}")
+        # print(f"\tMacro Average Recall: {np.round(metrics_['recall']*100,2)}")
+        # print(f"\tMacro Average F1-score: {np.round(metrics_['f1-score']*100,2)}")
         print(f"\tEER: {np.round(np.mean(metrics_['eer'])*100,2)}")
 
         with open(opDir+'/Performance.txt', 'a+') as f_:
             f_.write(f'Utterance duration: {duration}s:\n__________________________________________\n')
-            f_.write(f"\tAccuracy: {np.round(metrics_['accuracy']*100,2)}\n")
-            f_.write(f"\tMacro Average Precision: {np.round(metrics_['precision']*100,2)}\n")
-            f_.write(f"\tMacro Average Recall: {np.round(metrics_['recall']*100,2)}\n")
-            f_.write(f"\tMacro Average F1-score: {np.round(metrics_['f1-score']*100,2)}\n")
+            # f_.write(f"\tAccuracy: {np.round(metrics_['accuracy']*100,2)}\n")
+            # f_.write(f"\tMacro Average Precision: {np.round(metrics_['precision']*100,2)}\n")
+            # f_.write(f"\tMacro Average Recall: {np.round(metrics_['recall']*100,2)}\n")
+            # f_.write(f"\tMacro Average F1-score: {np.round(metrics_['f1-score']*100,2)}\n")
             f_.write(f"\tEER: {np.round(np.mean(metrics_['eer'])*100,2)}\n\n")
         
         return metrics_
