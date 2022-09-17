@@ -88,7 +88,7 @@ class GaussianBackground:
         print(f'RAM required: {ram_mem_req_} MB')
 
         if ram_mem_req_>ram_mem_avail_:
-            self.N_BATCHES = int(np.ceil(ram_mem_req_/(0.3*ram_mem_avail_)))
+            self.N_BATCHES = int(np.ceil(ram_mem_req_/(0.1*ram_mem_avail_)))
             '''
             Batch-wise training GMM-UBM
             '''
