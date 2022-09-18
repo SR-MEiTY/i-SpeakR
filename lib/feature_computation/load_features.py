@@ -66,7 +66,8 @@ class LoadFeatures:
             elif np.shape(fv_)[1]>np.shape(fv_)[0]:
                 fv_ = fv_.T
             feature_vectors_[speaker_id_][split_id_] = np.array(fv_, ndmin=2)
-            print(f'Loading features ({split_count_+1}/len(self.INFO.keys()))', end='\r', flush=True)
+            split_count_ += 1
+            print(f'Loading features ({split_count_}/{len(self.INFO.keys())})', end='\r', flush=True)
         print('')
                         
         return feature_vectors_            
