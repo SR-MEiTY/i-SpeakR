@@ -214,10 +214,20 @@ class MFCC:
 
         '''
         feature_details_ = {}
-        for data_type_ in [self.DEV_SET, self.ENR_SET, self.TEST_SET]:
+        for key_fName_ in [self.DEV_KEY, self.ENR_KEY, self.TEST_KEY]:
+            if key_fName_==self.DEV_KEY:
+                data_type_ = 'DEV'
+            elif key_fName_==self.ENR_KEY:
+                data_type_ = 'ENR'
+            elif key_fName_==self.TEST_KEY:
+                data_type_ = 'TEST'
+            
             feature_details_[data_type_] = {}
             
-            with open(self.DATA_INFO_DIR + '/' + data_type_, 'r') as meta_file_:
+            data_info_fName_ = self.DATA_INFO_DIR + '/' + key_fName_.split('/')[-1]
+            print(f'data_info_fName: {data_info_fName_}')
+
+            with open(data_info_fName_, 'r') as meta_file_:
                 reader_ = csv.DictReader(meta_file_)
                 for row_ in reader_:
                     speaker_id_ = row_['speaker_id']
