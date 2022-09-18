@@ -161,7 +161,7 @@ class ChopUtterances:
                 self.add_header(opFile_)
 
                 # If spldur_=='x', chopping is not done
-                if 'x' in chop_size_:
+                if -1 in chop_size_:
                     with open(opFile_, 'a+', encoding='utf8') as fid_:
                         writer_ = csv.writer(fid_)
                         split_id_ = utterance_id_ + '_x_000'
