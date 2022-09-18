@@ -58,102 +58,106 @@ def ivector_sv(PARAMS):
 GMM-UBM :: Speaker Verification System
 '''
 def gmm_ubm_sv(PARAMS):
-        GB_ = GaussianBackground(
-            model_dir=PARAMS['model_dir'], 
-            opDir=PARAMS['output_dir'],
-            num_mixtures=int(PARAMS['ubm_ncomponents']), 
-            feat_scaling=int(PARAMS['feature_scaling'])
-            )
-        
-        '''
-        Training the GMM-UBM model
-        '''
-        ubm_fName = PARAMS['model_dir'] + '/ubm.pkl'
-        if not os.path.exists(ubm_fName):
-            FV_dev_ = LoadFeatures(
-                info=feat_info_[PARAMS['dev_set']], 
-                feature_name=PARAMS['feature_name']
-                ).load(dim=int(PARAMS['num_dim']))
-            GB_.train_ubm(
-                FV_dev_, 
-                cov_type=PARAMS['covariance_type']
-                )
-        else:
-            print('The GMM-UBM is already available')
-        print('\n\n')
-        
-        
-        ''' 
-        Speaker-wise adaptation 
-        '''
-        FV_enr_ = LoadFeatures(
-            info=feat_info_[PARAMS['enr_set']], 
+    print('Creating a GaussianBackground model object')
+    GB_ = GaussianBackground(
+        model_dir=PARAMS['model_dir'], 
+        opDir=PARAMS['output_dir'],
+        num_mixtures=int(PARAMS['ubm_ncomponents']), 
+        feat_scaling=int(PARAMS['feature_scaling'])
+        )
+    
+    '''
+    Training the GMM-UBM model
+    '''
+    print('Training the GMM-UBM model')
+    ubm_fName = PARAMS['model_dir'] + '/ubm.pkl'
+    if not os.path.exists(ubm_fName):
+        FV_dev_ = LoadFeatures(
+            info=feat_info_[PARAMS['dev_set']], 
             feature_name=PARAMS['feature_name']
             ).load(dim=int(PARAMS['num_dim']))
-                
-        GB_.speaker_adaptation(
-            FV_enr_, 
-            cov_type=PARAMS['covariance_type'], 
-            use_adapt_w_cov=bool(PARAMS['adapt_weight_cov']),
+        GB_.train_ubm(
+            FV_dev_, 
+            cov_type=PARAMS['covariance_type']
             )
-        print('\n\n')
-                
-            
-        ''' 
-        Testing the trained models 
-        '''
-        test_opDir_ = PARAMS['output_dir'] + '/' + PARAMS['test_set'].split('.')[0] + '/'
-        if not os.path.exists(test_opDir_):
-            os.makedirs(test_opDir_)
-        
-        FPR_ = {}
-        TPR_ = {}
-        test_chop = json.loads(PARAMS.get('test_chop'))
-        for utter_dur_ in test_chop:
-            res_fName = test_opDir_ + '/Result_' + str(utter_dur_) + 's.pkl'
-            if not os.path.exists(res_fName):
-                '''
-                All test-data loaded at-once
-                '''
-                '''
-                FV_test_ = LoadFeatures(
-                    info=feat_info_[PARAMS['test_set']], 
-                    feature_name=PARAMS['feature_name']
-                    ).load(dim=int(PARAMS['num_dim']))
-                scores_ = GB_.perform_testing(
-                    opDir=PARAMS['output_dir'], 
-                    opFileName='Test_Scores', 
-                    X_TEST=FV_test_, 
-                    duration=int(utter_dur_)
-                    )
-                '''
-                
-                '''
-                Utterance-wise testing
-                '''
-                scores_ = GB_.perform_testing(
-                    opDir=test_opDir_, 
-                    feat_info=feat_info_[PARAMS['test_set']], 
-                    test_key=PARAMS['data_info_dir']+'/'+PARAMS['test_key'].split('/')[-1],
-                    dim=int(PARAMS['num_dim']), 
-                    duration=utter_dur_,
-                    )
-                
-                with open(res_fName, 'wb') as f_:
-                    pickle.dump({'scores':scores_}, f_, pickle.HIGHEST_PROTOCOL)
-            else:
-                with open(res_fName, 'rb') as f_:
-                    scores_ = pickle.load(f_)['scores']
+    else:
+        print('The GMM-UBM is already available')
+    print('\n\n')
     
-            ''' 
-            Computing the performance metrics 
+    
+    ''' 
+    Speaker-wise adaptation 
+    '''
+    print('Speaker-wise adaptation')
+    FV_enr_ = LoadFeatures(
+        info=feat_info_[PARAMS['enr_set']], 
+        feature_name=PARAMS['feature_name']
+        ).load(dim=int(PARAMS['num_dim']))
+            
+    GB_.speaker_adaptation(
+        FV_enr_, 
+        cov_type=PARAMS['covariance_type'], 
+        use_adapt_w_cov=bool(PARAMS['adapt_weight_cov']),
+        )
+    print('\n\n')
+            
+        
+    ''' 
+    Testing the trained models 
+    '''
+    print('Testing the trained models')
+    test_opDir_ = PARAMS['output_dir'] + '/' + PARAMS['test_set'].split('.')[0] + '/'
+    if not os.path.exists(test_opDir_):
+        os.makedirs(test_opDir_)
+    
+    FPR_ = {}
+    TPR_ = {}
+    test_chop = json.loads(PARAMS.get('test_chop'))
+    for utter_dur_ in test_chop:
+        res_fName = test_opDir_ + '/Result_' + str(utter_dur_) + 's.pkl'
+        if not os.path.exists(res_fName):
             '''
-            metrics_ = GB_.evaluate_performance(scores_, test_opDir_, utter_dur_)
-            FPR_[utter_dur_] = metrics_['fpr']
-            TPR_[utter_dur_] = metrics_['tpr']
-                
-        roc_opFile_ = test_opDir_ + '/ROC.png'
-        PerformanceMetrics().plot_roc(FPR_, TPR_, roc_opFile_)
+            All test-data loaded at-once
+            '''
+            '''
+            FV_test_ = LoadFeatures(
+                info=feat_info_[PARAMS['test_set']], 
+                feature_name=PARAMS['feature_name']
+                ).load(dim=int(PARAMS['num_dim']))
+            scores_ = GB_.perform_testing(
+                opDir=PARAMS['output_dir'], 
+                opFileName='Test_Scores', 
+                X_TEST=FV_test_, 
+                duration=int(utter_dur_)
+                )
+            '''
+            
+            '''
+            Utterance-wise testing
+            '''
+            scores_ = GB_.perform_testing(
+                opDir=test_opDir_, 
+                feat_info=feat_info_[PARAMS['test_set']], 
+                test_key=PARAMS['data_info_dir']+'/'+PARAMS['test_key'].split('/')[-1],
+                dim=int(PARAMS['num_dim']), 
+                duration=utter_dur_,
+                )
+            
+            with open(res_fName, 'wb') as f_:
+                pickle.dump({'scores':scores_}, f_, pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(res_fName, 'rb') as f_:
+                scores_ = pickle.load(f_)['scores']
+
+        ''' 
+        Computing the performance metrics 
+        '''
+        metrics_ = GB_.evaluate_performance(scores_, test_opDir_, utter_dur_)
+        FPR_[utter_dur_] = metrics_['fpr']
+        TPR_[utter_dur_] = metrics_['tpr']
+            
+    roc_opFile_ = test_opDir_ + '/ROC.png'
+    PerformanceMetrics().plot_roc(FPR_, TPR_, roc_opFile_)
 
 
 
@@ -209,6 +213,7 @@ if __name__ == '__main__':
     print('Feature details..')
     if PARAMS['feature_name']=='MFCC':
         feat_info_ = MFCC(config=PARAMS).get_feature_details()
+        print('Feature details obtained')
     
     
     if args.model_type=='GMM-UBM':    
