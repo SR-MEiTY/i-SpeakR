@@ -35,9 +35,9 @@ class MFCC:
         self.EXCL_C0 = config['excl_c0']
         self.DATA_INFO_DIR = config['data_info_dir']
         self.FEAT_DIR = config['feat_dir']
-        self.DEV_SET = config['dev_set']
-        self.ENR_SET = config['enr_set']
-        self.TEST_SET = config['test_set']
+        self.DEV_KEY = config['dev_key']
+        self.ENR_KEY = config['enr_key']
+        self.TEST_KEY = config['test_key']
         self.DELTA_FEAT = config.getboolean('compute_delta_feat')
     
     
@@ -100,14 +100,24 @@ class MFCC:
 
         '''
         feature_details_ = {}
-        for data_type_ in [self.DEV_SET, self.ENR_SET, self.TEST_SET]:
+        for key_fName_ in [self.DEV_KEY, self.ENR_KEY, self.TEST_KEY]:
+            if key_fName_==self.DEV_KEY:
+                data_type_ = 'DEV'
+            elif key_fName_==self.ENR_KEY:
+                data_type_ = 'ENR'
+            elif key_fName_==self.TEST_KEY:
+                data_type_ = 'TEST'
+            
             feature_details_[data_type_] = {}
             
+            data_info_fName_ = self.DATA_INFO_DIR + '/' + key_fName_.split('/')[-1]
+            print(f'data_info_fName: {data_info_fName_}')
+            
             nFiles_ = 0
-            with open(self.DATA_INFO_DIR + '/' + data_type_, 'r') as f_:
+            with open(data_info_fName_, 'r') as f_:
                 nFiles_ = len(f_.readlines())
                 
-            with open(self.DATA_INFO_DIR + '/' + data_type_, 'r') as meta_file_:
+            with open(data_info_fName_, 'r') as meta_file_:
                 reader_ = csv.DictReader(meta_file_)
                 utter_count_ = 0
                 for row_ in reader_:
