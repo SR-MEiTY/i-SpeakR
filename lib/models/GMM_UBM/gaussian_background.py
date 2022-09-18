@@ -58,12 +58,20 @@ class GaussianBackground:
 
         '''
         X_combined_ = np.empty([], dtype=np.float32)
+        speaker_count_ = 0
         for speaker_id_ in X.keys():
+            split_count_ = 0
             for split_id_ in X[speaker_id_].keys():
                 if np.size(X_combined_)<=1:
                     X_combined_ = np.array(X[speaker_id_][split_id_], dtype=np.float32)
                 else:
                     X_combined_ = np.append(X_combined_, np.array(X[speaker_id_][split_id_], dtype=np.float32), axis=0)
+                split_count_ += 1
+                print(f'Splits per speaker: ({split_count_}/{len(X[speaker_id_].keys())})', end='\r', flush=True)
+            print('')
+            speaker_count_ += 1
+            print(f'Speaker-wise data combination: ({speaker_count_}/{len(X.keys())})', end='\r', flush=True)
+        print('')
         print(f'Development data shape={np.shape(X_combined_)} data_type={X_combined_.dtype}')
 
         ''' Feature Scaling '''
