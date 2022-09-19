@@ -50,9 +50,10 @@ class LoadFeatures:
             Dictionary containing the speaker-wise feature arrays.
 
         '''
-        X_combined_ = np.empty([], dtype=np.float32)
+        # X_combined_ = np.empty([], dtype=np.float32)
         feature_vectors_ = {}
         split_count_ = 0
+        ram_mem_req_ = 0
         for split_id_ in self.INFO.keys():
             if not self.INFO[split_id_]['feature_name']==self.FEATURE_NAME:
                 print('Wrong feature path')
@@ -71,14 +72,15 @@ class LoadFeatures:
                 fv_ = fv_.T
             feature_vectors_[speaker_id_][split_id_] = np.array(fv_, ndmin=2)
             
-            if np.size(X_combined_)<=1:
-                X_combined_ = np.array(fv_, ndmin=2)
-            else:
-                X_combined_ = np.append(X_combined_, np.array(fv_, ndmin=2), axis=0)
+            # if np.size(X_combined_)<=1:
+            #     X_combined_ = np.array(fv_, ndmin=2)
+            # else:
+            #     X_combined_ = np.append(X_combined_, np.array(fv_, ndmin=2), axis=0)
+            ram_mem_req_ += (np.size(fv_)*4 + np.shape(fv_)[0]*self.NCOMP*4) >> 20
 
             split_count_ += 1
-            print(f'Loading features ({split_count_}/{len(self.INFO.keys())}) shape={np.shape(X_combined_)}', end='\r', flush=True)
+            print(f'Loading features ({split_count_}/{len(self.INFO.keys())}) RAM={ram_mem_req_} MB', end='\r', flush=True)
         print('')
         
-        return feature_vectors_, X_combined_
+        return feature_vectors_, ram_mem_req_
         

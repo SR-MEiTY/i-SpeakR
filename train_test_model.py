@@ -37,12 +37,13 @@ def ivector_sv(PARAMS):
         '''
         ubm_fName = PARAMS['model_dir'] + '/ubm.pkl'
         if not os.path.exists(ubm_fName):
-            FV_dev_, X_combined_ = LoadFeatures(
+            FV_dev_, ram_mem_req_ = LoadFeatures(
                 info=feat_info_[PARAMS['dev_set']], 
                 feature_name=PARAMS['feature_name']
                 ).load(dim=int(PARAMS['num_dim']))
             IVec_.train_ubm(
-                X_combined_, 
+                FV_dev_,
+                ram_mem_req_,
                 cov_type=PARAMS['covariance_type']
                 )
         else:
@@ -72,12 +73,13 @@ def gmm_ubm_sv(PARAMS):
     print('Training the GMM-UBM model')
     ubm_fName = PARAMS['model_dir'] + '/ubm.pkl'
     if not os.path.exists(ubm_fName):
-        FV_dev_, X_combined_ = LoadFeatures(
+        FV_dev_, ram_mem_req_ = LoadFeatures(
             info=feat_info_[PARAMS['dev_set']], 
             feature_name=PARAMS['feature_name']
             ).load(dim=int(PARAMS['num_dim']))
         GB_.train_ubm(
-            X_combined_, 
+            FV_dev_,
+            ram_mem_req_,
             cov_type=PARAMS['covariance_type']
             )
     else:
@@ -89,13 +91,14 @@ def gmm_ubm_sv(PARAMS):
     Speaker-wise adaptation 
     '''
     print('Speaker-wise adaptation')
-    FV_enr_, X_ENR_combined_ = LoadFeatures(
+    FV_enr_, ram_mem_req_ = LoadFeatures(
         info=feat_info_[PARAMS['enr_set']], 
         feature_name=PARAMS['feature_name']
         ).load(dim=int(PARAMS['num_dim']))
             
     GB_.speaker_adaptation(
         FV_enr_, 
+        ram_mem_req_,
         cov_type=PARAMS['covariance_type'], 
         use_adapt_w_cov=bool(PARAMS['adapt_weight_cov']),
         )
@@ -120,7 +123,7 @@ def gmm_ubm_sv(PARAMS):
             All test-data loaded at-once
             '''
             '''
-            FV_test_, X_TEST_combined_ = LoadFeatures(
+            FV_test_, ram_mem_req_ = LoadFeatures(
                 info=feat_info_[PARAMS['test_set']], 
                 feature_name=PARAMS['feature_name']
                 ).load(dim=int(PARAMS['num_dim']))
