@@ -134,11 +134,11 @@ class MFCC:
                         continue
                     
                     if data_type_.startswith('DEV'):
-                        opDir_path_ = self.FEAT_DIR + '/DEV/'
+                        opDir_path_ = self.FEAT_DIR + '/' + self.DEV_KEY.split('/')[-1].split('.')[0] + '/'
                     if data_type_.startswith('ENR'):
-                        opDir_path_ = self.FEAT_DIR + '/ENR/'
+                        opDir_path_ = self.FEAT_DIR + '/' + self.ENR_KEY.split('/')[-1].split('.')[0] + '/'
                     if data_type_.startswith('TEST'):
-                        opDir_path_ = self.FEAT_DIR + '/TEST/'
+                        opDir_path_ = self.FEAT_DIR + '/' + self.TEST_KEY.split('/')[-1].split('.')[0] + '/'
                     if not os.path.exists(opDir_path_):
                         os.makedirs(opDir_path_)
 
