@@ -70,13 +70,14 @@ class LoadFeatures:
             elif np.shape(fv_)[1]>np.shape(fv_)[0]:
                 fv_ = fv_.T
             feature_vectors_[speaker_id_][split_id_] = np.array(fv_, ndmin=2)
+            
             if np.size(X_combined_)<=1:
-                X_combined_ = np.array(fv_)
+                X_combined_ = np.array(fv_, ndmin=2)
             else:
-                X_combined_ = np.append(X_combined_, np.array(fv_), axis=0)
+                X_combined_ = np.append(X_combined_, np.array(fv_, ndmin=2), axis=0)
 
             split_count_ += 1
-            print(f'Loading features ({split_count_}/{len(self.INFO.keys())})', end='\r', flush=True)
+            print(f'Loading features ({split_count_}/{len(self.INFO.keys())}) shape={np.shape(X_combined_)}', end='\r', flush=True)
         print('')
         
         return feature_vectors_, X_combined_
