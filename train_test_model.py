@@ -98,7 +98,6 @@ def gmm_ubm_sv(PARAMS):
             
     GB_.speaker_adaptation(
         FV_enr_, 
-        ram_mem_req_,
         cov_type=PARAMS['covariance_type'], 
         use_adapt_w_cov=bool(PARAMS['adapt_weight_cov']),
         )
