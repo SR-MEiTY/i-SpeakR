@@ -88,14 +88,14 @@ class GaussianBackground:
         print(f'Available RAM: {ram_mem_avail_} MB')
         
         if isinstance(X_combined_, np.float32):
-            ram_mem_req_ = 2*(np.size(X_combined_)*4 + np.shape(X_combined_)[0]*self.NCOMP*4) >> 20
+            ram_mem_req_ = (np.size(X_combined_)*4 + np.shape(X_combined_)[0]*self.NCOMP*4) >> 20
         elif isinstance(X_combined_, np.float64):
-            ram_mem_req_ = 2*(np.size(X_combined_)*8 + np.shape(X_combined_)[0]*self.NCOMP*8) >> 20
+            ram_mem_req_ = (np.size(X_combined_)*8 + np.shape(X_combined_)[0]*self.NCOMP*8) >> 20
         else:
-            ram_mem_req_ = 2*(np.size(X_combined_)*8 + np.shape(X_combined_)[0]*self.NCOMP*8) >> 20
+            ram_mem_req_ = (np.size(X_combined_)*8 + np.shape(X_combined_)[0]*self.NCOMP*8) >> 20
         print(f'RAM required: {ram_mem_req_} MB')
 
-        if ram_mem_req_>ram_mem_avail_:
+        if (ram_mem_req_>ram_mem_avail_) or (ram_mem_req_>10000):
             self.N_BATCHES = int(np.ceil(ram_mem_req_/(0.1*ram_mem_avail_)))
             '''
             Batch-wise training GMM-UBM
