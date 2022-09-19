@@ -115,14 +115,16 @@ class GaussianBackground:
                 if batch_i_==0:
                     training_success_ = False
                     reg_covar_ = 1e-6
-                    while not training_success_:
-                        try:
-                            self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbosity, reg_covar=reg_covar_)
-                            self.BACKGROUND_MODEL.fit(X_batch_)
-                            training_success_ = True
-                        except:
-                            reg_covar_ = np.max([reg_covar_*10, 1e-1])
-                            print(f'Singleton component error. Reducing reg_covar to {np.round(reg_covar_,6)}')
+                    # while not training_success_:
+                    #     try:
+                    #         self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbosity, reg_covar=reg_covar_)
+                    #         self.BACKGROUND_MODEL.fit(X_batch_)
+                    #         training_success_ = True
+                    #     except:
+                    #         reg_covar_ = np.max([reg_covar_*10, 1e-1])
+                    #         print(f'Singleton component error. Reducing reg_covar to {np.round(reg_covar_,6)}')
+                    self.BACKGROUND_MODEL = GaussianMixture(n_components=self.NCOMP, covariance_type=cov_type, max_iter=max_iterations, n_init=num_init, verbose=verbosity, reg_covar=reg_covar_)
+                    self.BACKGROUND_MODEL.fit(X_batch_)
 
                     print(f'Batch: {batch_i_+1} model trained')
                 else:
