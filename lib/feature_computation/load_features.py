@@ -76,7 +76,7 @@ class LoadFeatures:
             #     X_combined_ = np.array(fv_, ndmin=2)
             # else:
             #     X_combined_ = np.append(X_combined_, np.array(fv_, ndmin=2), axis=0)
-            ram_mem_req_ += (np.size(fv_)*4 + np.shape(fv_)[0]*self.NCOMP*4) >> 20
+            ram_mem_req_ += (np.size(fv_)*4 + np.shape(fv_)[0]*512*4) >> 20
 
             split_count_ += 1
             print(f'Loading features ({split_count_}/{len(self.INFO.keys())}) RAM={ram_mem_req_} MB', end='\r', flush=True)
