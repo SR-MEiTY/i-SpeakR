@@ -108,7 +108,7 @@ def gmm_ubm_sv(PARAMS):
     Testing the trained models 
     '''
     print('Testing the trained models')
-    test_opDir_ = PARAMS['output_dir'] + '/' + PARAMS['test_set'].split('.')[0] + '/'
+    test_opDir_ = PARAMS['output_dir'] + '/' + PARAMS['test_key'].split('/')[-1].split('.')[0] + '/'
     if not os.path.exists(test_opDir_):
         os.makedirs(test_opDir_)
     

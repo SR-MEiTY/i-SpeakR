@@ -344,7 +344,10 @@ class GaussianBackground:
                 
                 speaker_id_list_ = []
                 for split_id_ in feat_info.keys():
-                    split_dur_ = int(split_id_.split('_')[-2])
+                    if not split_id_.split('_')[-2]=='x':
+                        split_dur_ = int(split_id_.split('_')[-2])
+                    else:
+                        split_dur_ = duration
                     if duration:
                         if not split_dur_==duration:
                             continue
