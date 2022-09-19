@@ -35,14 +35,14 @@ class GaussianBackground:
         self.N_BATCHES = 1
     
     
-    def train_ubm(self, X, cov_type='diag', max_iterations=100, num_init=1, verbosity=1):
+    def train_ubm(self, X_combined_, cov_type='diag', max_iterations=100, num_init=1, verbosity=1):
         '''
         Training the GMM Universal Background Model.
 
         Parameters
         ----------
-        X : dict
-            Dictionary containing the speaker-wise fature arrays.
+        X_combined_ : array
+            All feature arrays.
         cov_type : str, optional
             Type of covariance to be used to train the GMM. The default is 'diag'.
         max_iterations : int, optional
@@ -57,21 +57,21 @@ class GaussianBackground:
         None.
 
         '''
-        X_combined_ = np.empty([], dtype=np.float32)
-        speaker_count_ = 0
-        for speaker_id_ in X.keys():
-            split_count_ = 0
-            for split_id_ in X[speaker_id_].keys():
-                if np.size(X_combined_)<=1:
-                    X_combined_ = np.array(X[speaker_id_][split_id_], dtype=np.float32)
-                else:
-                    X_combined_ = np.append(X_combined_, np.array(X[speaker_id_][split_id_], dtype=np.float32), axis=0)
-                split_count_ += 1
-                # print(f'Splits per speaker: ({split_count_}/{len(X[speaker_id_].keys())})', end='\r', flush=True)
-            # print('')
-            speaker_count_ += 1
-            print(f'Speaker-wise data combination: ({speaker_count_}/{len(X.keys())})', end='\r', flush=True)
-        print('')
+        # X_combined_ = np.empty([], dtype=np.float32)
+        # speaker_count_ = 0
+        # for speaker_id_ in X.keys():
+        #     split_count_ = 0
+        #     for split_id_ in X[speaker_id_].keys():
+        #         if np.size(X_combined_)<=1:
+        #             X_combined_ = np.array(X[speaker_id_][split_id_], dtype=np.float32)
+        #         else:
+        #             X_combined_ = np.append(X_combined_, np.array(X[speaker_id_][split_id_], dtype=np.float32), axis=0)
+        #         split_count_ += 1
+        #         # print(f'Splits per speaker: ({split_count_}/{len(X[speaker_id_].keys())})', end='\r', flush=True)
+        #     # print('')
+        #     speaker_count_ += 1
+        #     print(f'Speaker-wise data combination: ({speaker_count_}/{len(X.keys())})', end='\r', flush=True)
+        # print('')
         print(f'Development data shape={np.shape(X_combined_)} data_type={X_combined_.dtype}')
 
         ''' Feature Scaling '''
