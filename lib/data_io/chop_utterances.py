@@ -221,6 +221,6 @@ class ChopUtterances:
                         
                     print(f'\t({utter_count_}/{len(meta_info[data_type_])}) {fName_} chop details stored for duration={spldur_}s')
 
-            with open(opFile_, 'w+', encoding='utf8') as fid_:
-                fid_.write(csv_output_string_)
+            # with open(opFile_, 'w+', encoding='utf8') as fid_:
+            #     fid_.write(csv_output_string_)
                 

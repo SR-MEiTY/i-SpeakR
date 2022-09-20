@@ -296,7 +296,8 @@ class GaussianBackground:
             score_fName_ = opDir + '/Test_Scores_' + str(duration) + 's.pkl'
         else:
             score_fName_ = opDir + '/Test_Scores.pkl'
-            
+        
+        print(f'scores={os.path.exists(score_fName_)}')
         if not os.path.exists(score_fName_):
             if not self.BACKGROUND_MODEL:
                 ubm_fName_ = self.MODEL_DIR + '/ubm.pkl'
@@ -403,6 +404,7 @@ class GaussianBackground:
                             if enr_speaker_model_[index_i_]['speaker_id'] in cohort_speakers_:
                                 spk_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
                                 llr_scores_[enr_speaker_model_[index_i_]['speaker_id']] = np.mean(np.subtract(spk_model_scores_,  bg_model_scores_))
+                        print(llr_scores_)
                         
                         scores_[split_id_] = {
                             # 'index': map_idx_,
