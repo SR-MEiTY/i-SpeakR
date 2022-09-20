@@ -141,11 +141,11 @@ class ChopUtterances:
             if os.path.exists(opFile_):
                 continue
             
-            utter_count = 0
+            utter_count_ = 0
             csv_output_string_ = ''
             for utterance_id_ in meta_info[data_type_].keys():
-                utter_count += 1
-                # print(f'{data_type_} {utterance_id_} ({utter_count}/{len(meta_info[data_type_].keys())})')
+                utter_count_ += 1
+                # print(f'{data_type_} {utterance_id_} ({utter_count_}/{len(meta_info[data_type_].keys())})')
                 fName_ = meta_info[data_type_][utterance_id_]['wav_path'].split('/')[-1]
                 data_path_ = meta_info[data_type_][utterance_id_]['wav_path']
                 speaker_id_ = meta_info[data_type_][utterance_id_]['speaker_id']
@@ -163,23 +163,23 @@ class ChopUtterances:
 
                 # If spldur_=='x', chopping is not done
                 if -1 in chop_size_:
-                    # with open(opFile_, 'a+', encoding='utf8') as fid_:
-                    #     writer_ = csv.writer(fid_)
-                    #     split_id_ = utterance_id_ + '_x_000'
-                    #     writer_.writerow([
-                    #         speaker_id_,
-                    #         utterance_id_,
-                    #         split_id_, 
-                    #         0, 
-                    #         nSamples_, 
-                    #         np.round(nSamples_/self.SAMPLING_RATE,2),
-                    #         data_path_,
-                    #         cohorts_
-                    #         ])
+                    with open(opFile_, 'a+', encoding='utf8') as fid_:
+                        writer_ = csv.writer(fid_)
+                        split_id_ = utterance_id_ + '_x_000'
+                        writer_.writerow([
+                            speaker_id_,
+                            utterance_id_,
+                            split_id_, 
+                            0, 
+                            nSamples_, 
+                            np.round(nSamples_/self.SAMPLING_RATE,2),
+                            data_path_,
+                            cohorts_
+                            ])
                     
-                    split_id_ = utterance_id_ + '_x_000'
-                    csv_output_string_ += speaker_id_ + ',' + utterance_id_ + ',' + split_id_ + ',' + '0' + ',' + str(nSamples_) + ',' + str(np.round(nSamples_/self.SAMPLING_RATE,2)) + ',' + data_path_ + ',' + cohorts_ + '\n'
-                    # print(f'\t{fName_} not chopped')
+                    # split_id_ = utterance_id_ + '_x_000'
+                    # csv_output_string_ += speaker_id_ + ',' + utterance_id_ + ',' + split_id_ + ',' + '0' + ',' + str(nSamples_) + ',' + str(np.round(nSamples_/self.SAMPLING_RATE,2)) + ',' + data_path_ + ',' + cohorts_ + '\n'
+                    print(f'\t({utter_count_}/{len(meta_info[data_type_])}) {fName_} not chopped')
                     continue                    
                     
                 # Compute the sub-utterances and store the details in csv files
@@ -193,26 +193,29 @@ class ChopUtterances:
                             smpEnd_ = nSamples_
 
                         if ((smpEnd_-smpStart_)/self.SAMPLING_RATE>spldur_) or (smpEnd_==nSamples_):
-                            # with open(opFile_, 'a+', encoding='utf8') as fid_:
-                            #     writer_ = csv.writer(fid_)
-                            #     split_id_ = utterance_id_ + '_' + str(spldur_) + '_' + format(seg_count_, '03d')
-                            #     writer_.writerow([
-                            #         speaker_id_,
-                            #         utterance_id_,
-                            #         split_id_, 
-                            #         smpStart_, 
-                            #         smpEnd_, 
-                            #         np.round((smpEnd_-smpStart_)/self.SAMPLING_RATE,2),
-                            #         data_path_,
-                            #         cohorts_
-                            #         ])
-                            split_id_ = utterance_id_ + '_' + str(spldur_) + '_' + format(seg_count_, '03d')
-                            csv_output_string_ += speaker_id_ + ',' + utterance_id_ + ',' + split_id_ + ',' + str(smpStart_) + ',' + str(smpEnd_) + ',' + str(np.round((smpEnd_-smpStart_)/self.SAMPLING_RATE,2)) + ',' + data_path_ + ',' + cohorts_ + '\n'
+                            with open(opFile_, 'a+', encoding='utf8') as fid_:
+                                writer_ = csv.writer(fid_)
+                                split_id_ = utterance_id_ + '_' + str(spldur_) + '_' + format(seg_count_, '03d')
+                                writer_.writerow([
+                                    speaker_id_,
+                                    utterance_id_,
+                                    split_id_, 
+                                    smpStart_, 
+                                    smpEnd_, 
+                                    np.round((smpEnd_-smpStart_)/self.SAMPLING_RATE,2),
+                                    data_path_,
+                                    cohorts_
+                                    ])
+                                
+                            # split_id_ = utterance_id_ + '_' + str(spldur_) + '_' + format(seg_count_, '03d')
+                            # csv_output_string_ += speaker_id_ + ',' + utterance_id_ + ',' + split_id_ + ',' + str(smpStart_) + ',' + str(smpEnd_) + ',' + str(np.round((smpEnd_-smpStart_)/self.SAMPLING_RATE,2)) + ',' + data_path_ + ',' + cohorts_ + '\n'
+                            
                             seg_count_ += 1
                             smpStart_ = smpEnd_
                         else:
                             continue
-                    # print(f'\t{fName_} chop details stored for duration={spldur_}s')
+                        
+                    print(f'\t({utter_count_}/{len(meta_info[data_type_])}) {fName_} chop details stored for duration={spldur_}s')
 
             with open(opFile_, 'w+', encoding='utf8') as fid_:
                 fid_.write(csv_output_string_)
