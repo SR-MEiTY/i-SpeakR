@@ -177,7 +177,7 @@ class ChopUtterances:
                     #         cohorts_
                     #         ])
                     split_id_ = utterance_id_ + '_x_000'
-                    csv_output_string_ += speaker_id_ + ',' + utterance_id_ + ',' + split_id_ + ',' + 0 + ',' + nSamples_ + ',' + np.round(nSamples_/self.SAMPLING_RATE,2) + ',' + data_path_ + ',' + cohorts_ + '\n'
+                    csv_output_string_ += speaker_id_ + ',' + utterance_id_ + ',' + split_id_ + ',' + '0' + ',' + str(nSamples_) + ',' + str(np.round(nSamples_/self.SAMPLING_RATE,2)) + ',' + data_path_ + ',' + cohorts_ + '\n'
                     print(f'\t{fName_} not chopped')
                     continue                    
                     
@@ -206,7 +206,7 @@ class ChopUtterances:
                             #         cohorts_
                             #         ])
                             split_id_ = utterance_id_ + '_' + str(spldur_) + '_' + format(seg_count_, '03d')
-                            csv_output_string_ += speaker_id_ + ',' + utterance_id_ + ',' + split_id_ + ',' + smpStart_ + ',' + smpEnd_ + ',' + np.round((smpEnd_-smpStart_)/self.SAMPLING_RATE,2) + ',' + data_path_ + ',' + cohorts_ + '\n'
+                            csv_output_string_ += speaker_id_ + ',' + utterance_id_ + ',' + split_id_ + ',' + str(smpStart_) + ',' + str(smpEnd_) + ',' + str(np.round((smpEnd_-smpStart_)/self.SAMPLING_RATE,2)) + ',' + data_path_ + ',' + cohorts_ + '\n'
                             seg_count_ += 1
                             smpStart_ = smpEnd_
                         else:
