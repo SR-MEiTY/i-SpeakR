@@ -142,6 +142,7 @@ class ChopUtterances:
                 continue
             
             utter_count = 0
+            csv_output_string_ = ''
             for utterance_id_ in meta_info[data_type_].keys():
                 utter_count += 1
                 # print(f'{data_type_} {utterance_id_} ({utter_count}/{len(meta_info[data_type_].keys())})')
@@ -162,19 +163,21 @@ class ChopUtterances:
 
                 # If spldur_=='x', chopping is not done
                 if -1 in chop_size_:
-                    with open(opFile_, 'a+', encoding='utf8') as fid_:
-                        writer_ = csv.writer(fid_)
-                        split_id_ = utterance_id_ + '_x_000'
-                        writer_.writerow([
-                            speaker_id_,
-                            utterance_id_,
-                            split_id_, 
-                            0, 
-                            nSamples_, 
-                            np.round(nSamples_/self.SAMPLING_RATE,2),
-                            data_path_,
-                            cohorts_
-                            ])
+                    # with open(opFile_, 'a+', encoding='utf8') as fid_:
+                    #     writer_ = csv.writer(fid_)
+                    #     split_id_ = utterance_id_ + '_x_000'
+                    #     writer_.writerow([
+                    #         speaker_id_,
+                    #         utterance_id_,
+                    #         split_id_, 
+                    #         0, 
+                    #         nSamples_, 
+                    #         np.round(nSamples_/self.SAMPLING_RATE,2),
+                    #         data_path_,
+                    #         cohorts_
+                    #         ])
+                    split_id_ = utterance_id_ + '_x_000'
+                    csv_output_string_ += speaker_id_ + ',' + utterance_id_ + ',' + split_id_ + ',' + 0 + ',' + nSamples_ + ',' + np.round(nSamples_/self.SAMPLING_RATE,2) + ',' + data_path_ + ',' + cohorts_ + '\n'
                     print(f'\t{fName_} not chopped')
                     continue                    
                     
@@ -207,3 +210,8 @@ class ChopUtterances:
                         else:
                             continue
                     print(f'\t{fName_} chop details stored for duration={spldur_}s')
+
+            if data_type_.startswith('TEST'):
+                with open(opFile_, 'w+', encoding='utf8') as fid_:
+                    fid_.write(csv_output_string_)
+                
