@@ -76,11 +76,13 @@ def compute_performance(gt_fName, pred_fName):
                 predictions_[row_['utterance_id']] = {row_['speaker_id']:row_['score']}
             else:
                 predictions_[row_['utterance_id']][row_['speaker_id']] = row_['score']
+        
+    print(f'predictions={predictions_}')
     
     gt_scores_ = np.zeros((len(groundtruth_), len(all_speaker_id_)))
-    gt_scores_final_ = np.empty([])
-    pred_scores_ = np.zeros((len(groundtruth_), len(all_speaker_id_)))
-    pred_scores_final_ = np.empty([])
+    gt_scores_final_ = [] # np.empty([])
+    pred_scores_ = np.ones((len(groundtruth_), len(all_speaker_id_)))*-9999999
+    pred_scores_final_ = [] # np.empty([])
     utterance_count_ = 0
     not_tested_with_target_ = 0
     for rand_id_ in predictions_.keys():
@@ -88,24 +90,47 @@ def compute_performance(gt_fName, pred_fName):
         gt_speaker_id_ = Utterance_ID_.split('_')[0]
         gt_scores_[utterance_count_, all_speaker_id_[gt_speaker_id_]] = 1
         for test_speaker_id_ in predictions_[rand_id_].keys():
-            pred_scores_[utterance_count_, all_speaker_id_[test_speaker_id_]] = predictions_[rand_id_][test_speaker_id_]
+            # pred_scores_[utterance_count_, all_speaker_id_[test_speaker_id_]] = predictions_[rand_id_][test_speaker_id_]
+            if gt_speaker_id_==test_speaker_id_:
+                gt_scores_final_.append(1)
+                print('same ', gt_speaker_id_, test_speaker_id_)
+            else:
+                gt_scores_final_.append(0)
+                print('diff ', gt_speaker_id_, test_speaker_id_)
+            pred_scores_final_.append(predictions_[rand_id_][test_speaker_id_])
+
         if pred_scores_[utterance_count_, all_speaker_id_[gt_speaker_id_]]==0:
             not_tested_with_target_ += 1
         
-        idx_ = np.squeeze(np.where(pred_scores_[utterance_count_,:]>0))
-        if np.size(gt_scores_final_)<=1:
-            gt_scores_final_ = np.array(gt_scores_[utterance_count_, idx_], ndmin=2)
-            pred_scores_final_ = np.array(pred_scores_[utterance_count_, idx_], ndmin=2)
-        else:
-            gt_scores_final_ = np.append(gt_scores_final_, np.array(gt_scores_[utterance_count_, idx_], ndmin=2), axis=0)
-            pred_scores_final_ = np.append(pred_scores_final_, np.array(pred_scores_[utterance_count_, idx_], ndmin=2), axis=0)
-            
+        # idx_ = np.squeeze(np.where(pred_scores_[utterance_count_,:]>0))
+        # idx_ = np.argmax(pred_scores_[utterance_count_,:])
+        # if np.size(gt_scores_final_)<=1:
+        #     gt_scores_final_ = np.array(gt_scores_[utterance_count_, idx_], ndmin=2)
+        #     pred_scores_final_ = np.array(pred_scores_[utterance_count_, idx_], ndmin=2)
+        # else:
+        #     print(f'{np.shape(gt_scores_final_)}')
+        #     print(f'{np.shape(gt_scores_)} {utterance_count_} {idx_}')
+        #     gt_scores_final_ = np.append(gt_scores_final_, np.array(gt_scores_[utterance_count_, idx_], ndmin=2), axis=0)
+        #     pred_scores_final_ = np.append(pred_scores_final_, np.array(pred_scores_[utterance_count_, idx_], ndmin=2), axis=0)
+        
+        # print(f'idx_={idx_}')
+        # print(f'{gt_scores_[utterance_count_, idx_]} {pred_scores_[utterance_count_, idx_]}')
+        # gt_scores_final_.append(gt_scores_[utterance_count_, idx_])
+        # pred_scores_final_.append(pred_scores_[utterance_count_, idx_])
+
         utterance_count_ += 1
         
     # print(f'gt: {np.shape(gt_scores_final_)} {np.shape(gt_scores_)}')
     # print(f'pred: {np.shape(pred_scores_final_)} {np.shape(pred_scores_)}')
-        
-    FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(gt_scores_final_.flatten(), pred_scores_final_.flatten())
+    
+    # print(f'gt_scores_final_={gt_scores_final_}')
+    
+    # import matplotlib.pyplot as plt
+    # plt.plot(gt_scores_final_)
+    # plt.plot(pred_scores_final_)
+    # plt.show()
+    
+    FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(gt_scores_final_, pred_scores_final_)
     
     ConfMat, precision, recall, fscore = PerformanceMetrics().compute_identification_performance(np.argmax(gt_scores_, axis=1), np.argmax(pred_scores_, axis=1), labels=list(range(len(all_speaker_id_))))
     
@@ -156,9 +181,6 @@ def __init__():
     args = parser.parse_args()
     
     return args
-
-
-
 
 
 

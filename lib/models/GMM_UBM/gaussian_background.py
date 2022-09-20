@@ -361,6 +361,7 @@ class GaussianBackground:
                     for row_ in reader_:
                         split_id_ = row_['split_id']
                         cohort_speakers_ = row_['cohorts'].split('|')
+                        print(f'cohort_speakers_={cohort_speakers_}')
                                 
                         # if duration:
                         #     if not split_id_.split('_')[-2]==str(duration):
@@ -396,11 +397,9 @@ class GaussianBackground:
                         # match_count_[map_idx_] += 1
 
                         for index_i_ in enr_speaker_model_.keys():
-                            if enr_speaker_model_[index_i_]['speaker_id'] not in cohort_speakers_:
-                                continue
-                            else:
+                            if enr_speaker_model_[index_i_]['speaker_id'] in cohort_speakers_:
                                 spk_model_scores_ = np.array(enr_speaker_model_[index_i_]['model'].score_samples(fv_))
-                            llr_scores_[enr_speaker_model_[index_i_]['speaker_id']] = np.mean(np.subtract(spk_model_scores_,  bg_model_scores_))
+                                llr_scores_[enr_speaker_model_[index_i_]['speaker_id']] = np.mean(np.subtract(spk_model_scores_,  bg_model_scores_))
                         
                         scores_[split_id_] = {
                             # 'index': map_idx_,
@@ -544,6 +543,8 @@ class GaussianBackground:
         predicted_scores_ = np.empty([])
         for split_id_ in res.keys():
             true_speaker_id_ = res[split_id_]['speaker_id']
+            if true_speaker_id_=='0000':
+                continue
             # pred_speaker_id_ = res[split_id_]['matched_speaker']
             cohort_scores_ = res[split_id_]['llr_scores']
             
@@ -577,8 +578,14 @@ class GaussianBackground:
         # label_list = list(range(np.size(all_speaker_id_)))
         # confmat_, precision_, recall_, fscore_ = PerformanceMetrics().compute_identification_performance(groundtruth_label_, ptd_labels_, label_list)
         # acc_ = np.sum(np.diag(confmat_))/np.sum(confmat_)
-
-        FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(groundtruth_scores_, predicted_scores_)
+        
+        if not np.size(groundtruth_scores_)<=1:
+            FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(groundtruth_scores_, predicted_scores_)
+        else:
+            FPR_ = np.empty([])
+            TPR_ = np.empty([])
+            EER_ = 0.0
+            EER_thresh_ = np.empty([])
                 
         metrics_ = {
             # 'accuracy': acc_,
