@@ -32,7 +32,7 @@ class ChopUtterances:
         self.DATA_INFO_DIR = config['DATA_INFO_DIR']
             
             
-    def get_non_silence_intervals(self, file_path):
+    def get_non_silence_intervals(self, file_path, rem_sil=True):
         '''
         Load the specified wav file and compute non-silent intervals using a 
         VAD threshold of 60% of average utterance energy
@@ -54,7 +54,10 @@ class ChopUtterances:
         Xin_ = Normalize().mean_max_normalize(Xin_)
         # Threshold is 60% of average energy of the utterance
         top_dB_ = -10*np.log10(0.6*np.mean(Xin_**2)) 
-        nonsil_intervals_ = librosa.effects.split(Xin_, top_db=top_dB_, frame_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH)
+        if rem_sil:
+            nonsil_intervals_ = librosa.effects.split(Xin_, top_db=top_dB_, frame_length=self.FRAME_LENGTH, hop_length=self.HOP_LENGTH)
+        else:
+            nonsil_intervals_ = []
         
         return nonsil_intervals_, len(Xin_)
         
@@ -157,12 +160,12 @@ class ChopUtterances:
                     print('\tWAV file does not exist ', data_path_)
                     continue
 
-                nonsil_intervals_, nSamples_ = self.get_non_silence_intervals(data_path_)
 
                 self.add_header(opFile_)
 
                 # If spldur_=='x', chopping is not done
                 if -1 in chop_size_:
+                    nonsil_intervals_, nSamples_ = self.get_non_silence_intervals(data_path_, rem_sil=False)
                     with open(opFile_, 'a+', encoding='utf8') as fid_:
                         writer_ = csv.writer(fid_)
                         split_id_ = utterance_id_ + '_x_000'
@@ -182,6 +185,7 @@ class ChopUtterances:
                     print(f'\t({utter_count_}/{len(meta_info[data_type_])}) {fName_} not chopped')
                     continue                    
                     
+                nonsil_intervals_, nSamples_ = self.get_non_silence_intervals(data_path_)
                 # Compute the sub-utterances and store the details in csv files
                 for spldur_ in chop_size_:
                     seg_count_ = 1
