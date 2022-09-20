@@ -25,14 +25,16 @@ class GaussianBackground:
     FEATURE_SCALING = 0
     SCALER = None
     N_BATCHES = 0
+    MEM_LIMIT = 0
     
     
-    def __init__(self, model_dir, opDir, num_mixtures=128, feat_scaling=0):
+    def __init__(self, model_dir, opDir, num_mixtures=128, feat_scaling=0, mem_limit=5000):
         self.MODEL_DIR = model_dir
         self.OPDIR = opDir
         self.NCOMP = num_mixtures
         self.FEATURE_SCALING = feat_scaling
         self.N_BATCHES = 1
+        self.MEM_LIMIT = mem_limit
     
     
     def train_ubm(self, X, ram_mem_req, cov_type='diag', max_iterations=100, num_init=1, verbosity=1):
@@ -79,8 +81,8 @@ class GaussianBackground:
         #     X_combined_ = X_combined_.astype(np.float32)
         
 
-        if (ram_mem_req>ram_mem_avail_) or (ram_mem_req>5000):
-            self.N_BATCHES = int(ram_mem_req/5000) # int(np.ceil(ram_mem_req_/(0.1*ram_mem_avail_)))
+        if (ram_mem_req>ram_mem_avail_) or (ram_mem_req>self.MEM_LIMIT):
+            self.N_BATCHES = int(ram_mem_req/self.MEM_LIMIT) # int(np.ceil(ram_mem_req_/(0.1*ram_mem_avail_)))
             '''
             Batch-wise training GMM-UBM
             '''
@@ -102,7 +104,7 @@ class GaussianBackground:
                     break
                 X_batch_ = np.empty([])
                 data_size_ = 0
-                while data_size_<5000:
+                while data_size_<self.MEM_LIMIT:
                     spId_ = speaker_ids_.pop()
                     for split_id_ in X[spId_].keys():
                         if np.size(X_batch_)<=1:
@@ -360,6 +362,7 @@ class GaussianBackground:
                     reader_ = csv.DictReader(test_meta_info_)
                     for row_ in reader_:
                         split_id_ = row_['split_id']
+                        print(row_['cohorts'])
                         cohort_speakers_ = row_['cohorts'].split('|')
                         print(f'cohort_speakers_={cohort_speakers_}')
                                 

@@ -64,7 +64,8 @@ def gmm_ubm_sv(PARAMS):
         model_dir=PARAMS['model_dir'], 
         opDir=PARAMS['output_dir'],
         num_mixtures=int(PARAMS['ubm_ncomponents']), 
-        feat_scaling=int(PARAMS['feature_scaling'])
+        feat_scaling=int(PARAMS['feature_scaling']),
+        mem_limit=int(PARAMS['ubm_memory_limit'])
         )
     
     '''

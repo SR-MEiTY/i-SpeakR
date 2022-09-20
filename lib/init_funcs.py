@@ -159,6 +159,7 @@ def get_configurations():
         'data_path': section['data_path'],                          # Path to data set
         'output_path': section['output_path'],                      # Path where program output is to be stored
         'dataset_name': section['dataset_name'],                    # Name of the dataset
+        'ubm_memory_limit': section['ubm_memory_limit'],            # Memory limit to perform batch-wise UBM training
         }
     
     if CFG['FEATURE_NAME']=='MFCC':
