@@ -584,12 +584,18 @@ class GaussianBackground:
         # confmat_, precision_, recall_, fscore_ = PerformanceMetrics().compute_identification_performance(groundtruth_label_, ptd_labels_, label_list)
         # acc_ = np.sum(np.diag(confmat_))/np.sum(confmat_)
         
-        if not np.size(groundtruth_scores_)<=1:
-            FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(groundtruth_scores_, predicted_scores_)
+        if not np.sum(groundtruth_scores_)==0:            
+            if not np.size(groundtruth_scores_)<=1:
+                FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(groundtruth_scores_, predicted_scores_)
+            else:
+                FPR_ = np.empty([])
+                TPR_ = np.empty([])
+                EER_ = -1
+                EER_thresh_ = np.empty([])                
         else:
             FPR_ = np.empty([])
             TPR_ = np.empty([])
-            EER_ = 0.0
+            EER_ = -1
             EER_thresh_ = np.empty([])
                 
         metrics_ = {
