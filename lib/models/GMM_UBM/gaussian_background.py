@@ -356,8 +356,16 @@ class GaussianBackground:
                             continue
                     speaker_id_list_.append(feat_info[split_id_]['speaker_id'])
                     total_splits_ += 1
+
+                output_fName_ = opDir+'/'+test_key.split('/')[-1].split('.')[0]+'_predictions.csv'
+                with open(output_fName_, 'a+', encoding='utf8') as fid_:
+                    writer_ = csv.writer(fid_)
+                    writer_.writerow([
+                        'utterance_id',
+                        'speaker_id', 
+                        'score', 
+                        ])
                     
-                
                 split_count_ = 0
                 with open(test_key, 'r' ) as test_meta_info_:
                     reader_ = csv.DictReader(test_meta_info_)
