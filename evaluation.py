@@ -39,10 +39,10 @@ def generate_random_test_predictions(gt_fName, pred_fName):
             for i in range(5):
                 if cohort_[i] == speaker_id_:
                     # score = np.random.uniform(low=0.7, high=1.0)
-                    score = np.min([np.abs(np.random.normal(loc=0.7, scale=0.1)), 1])
+                    score = np.random.normal(loc=0.7, scale=0.1)
                 else:
                     # score = np.random.uniform(low=0.0, high=0.3)
-                    score = np.max([np.abs(np.random.normal(loc=0.3, scale=0.1)), 0])
+                    score = np.random.normal(loc=0.3, scale=0.1)
                 with open(pred_fName, 'a+', encoding='utf8') as pred_fid_:
                     writer_ = csv.writer(pred_fid_)
                     writer_.writerow([
@@ -77,8 +77,6 @@ def compute_performance(gt_fName, pred_fName):
             else:
                 predictions_[row_['utterance_id']][row_['speaker_id']] = row_['score']
         
-    print(f'predictions={predictions_}')
-    
     gt_scores_ = np.zeros((len(groundtruth_), len(all_speaker_id_)))
     gt_scores_final_ = [] # np.empty([])
     pred_scores_ = np.ones((len(groundtruth_), len(all_speaker_id_)))*-9999999
@@ -90,55 +88,36 @@ def compute_performance(gt_fName, pred_fName):
         gt_speaker_id_ = Utterance_ID_.split('_')[0]
         gt_scores_[utterance_count_, all_speaker_id_[gt_speaker_id_]] = 1
         for test_speaker_id_ in predictions_[rand_id_].keys():
-            # pred_scores_[utterance_count_, all_speaker_id_[test_speaker_id_]] = predictions_[rand_id_][test_speaker_id_]
+            pred_scores_[utterance_count_, all_speaker_id_[test_speaker_id_]] = float(predictions_[rand_id_][test_speaker_id_])
             if gt_speaker_id_==test_speaker_id_:
                 gt_scores_final_.append(1)
-                print('same ', gt_speaker_id_, test_speaker_id_)
             else:
                 gt_scores_final_.append(0)
-                print('diff ', gt_speaker_id_, test_speaker_id_)
-            pred_scores_final_.append(predictions_[rand_id_][test_speaker_id_])
+            pred_scores_final_.append(float(predictions_[rand_id_][test_speaker_id_]))
 
         if pred_scores_[utterance_count_, all_speaker_id_[gt_speaker_id_]]==0:
             not_tested_with_target_ += 1
         
-        # idx_ = np.squeeze(np.where(pred_scores_[utterance_count_,:]>0))
-        # idx_ = np.argmax(pred_scores_[utterance_count_,:])
-        # if np.size(gt_scores_final_)<=1:
-        #     gt_scores_final_ = np.array(gt_scores_[utterance_count_, idx_], ndmin=2)
-        #     pred_scores_final_ = np.array(pred_scores_[utterance_count_, idx_], ndmin=2)
-        # else:
-        #     print(f'{np.shape(gt_scores_final_)}')
-        #     print(f'{np.shape(gt_scores_)} {utterance_count_} {idx_}')
-        #     gt_scores_final_ = np.append(gt_scores_final_, np.array(gt_scores_[utterance_count_, idx_], ndmin=2), axis=0)
-        #     pred_scores_final_ = np.append(pred_scores_final_, np.array(pred_scores_[utterance_count_, idx_], ndmin=2), axis=0)
-        
-        # print(f'idx_={idx_}')
-        # print(f'{gt_scores_[utterance_count_, idx_]} {pred_scores_[utterance_count_, idx_]}')
-        # gt_scores_final_.append(gt_scores_[utterance_count_, idx_])
-        # pred_scores_final_.append(pred_scores_[utterance_count_, idx_])
-
         utterance_count_ += 1
-        
-    # print(f'gt: {np.shape(gt_scores_final_)} {np.shape(gt_scores_)}')
-    # print(f'pred: {np.shape(pred_scores_final_)} {np.shape(pred_scores_)}')
-    
-    # print(f'gt_scores_final_={gt_scores_final_}')
-    
-    # import matplotlib.pyplot as plt
-    # plt.plot(gt_scores_final_)
-    # plt.plot(pred_scores_final_)
-    # plt.show()
-    
+
     FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(gt_scores_final_, pred_scores_final_)
     
     ConfMat, precision, recall, fscore = PerformanceMetrics().compute_identification_performance(np.argmax(gt_scores_, axis=1), np.argmax(pred_scores_, axis=1), labels=list(range(len(all_speaker_id_))))
     
     print('\n\nResults:')
-    print(f'\tPrecision={np.round(precision,4)}')
-    print(f'\tRecall={np.round(recall,4)}')
-    print(f'\tFscore={np.round(fscore,4)}')
-    print(f'\tEER={np.round(EER_,4)}\n')
+    print(f'\tPrecision={np.round(precision*100,2)}')
+    print(f'\tRecall={np.round(recall*100,2)}')
+    print(f'\tFscore={np.round(fscore*100,2)}')
+    print(f'\tEER={np.round(EER_*100,2)}\n')
+    
+    opFile = '/'.join(pred_fName.split('/')[:-1]) + '/Evaluation_Results.txt'
+    with open(opFile, 'w+', encoding='utf8') as fid_:
+        fid_.write('Results:\n')
+        fid_.write('----------------------------------------\n')
+        fid_.write(f'\tPrecision={np.round(precision*100,2)}\n')
+        fid_.write(f'\tRecall={np.round(recall*100,2)}\n')
+        fid_.write(f'\tFscore={np.round(fscore*100,2)}\n')
+        fid_.write(f'\tEER={np.round(EER_*100,2)}\n\n')
     
     return FPR_, TPR_, EER_, EER_thresh_
 
