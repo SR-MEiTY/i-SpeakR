@@ -25,32 +25,34 @@ import json
 I-Vector :: Speaker Verification System
 '''
 def ivector_sv(PARAMS):
-        IVec_ = IVector(
-            model_dir=PARAMS['model_dir'], 
-            opDir=PARAMS['output_dir'],
-            num_mixtures=int(PARAMS['ubm_ncomponents']), 
-            feat_scaling=int(PARAMS['feature_scaling'])
+    IVec_ = IVector(
+        ubm_dir=PARAMS['ubm_dir'], 
+        model_dir=PARAMS['model_dir'], 
+        opDir=PARAMS['output_dir'],
+        num_mixtures=int(PARAMS['ubm_ncomponents']), 
+        feat_scaling=int(PARAMS['feature_scaling'])
+        )
+    
+    '''
+    Training the GMM-UBM model
+    '''
+    print('Training the GMM-UBM model')
+    ubm_fName = PARAMS['ubm_dir'] + '/ubm.pkl'
+    if not os.path.exists(ubm_fName):
+        FV_dev_, ram_mem_req_ = LoadFeatures(
+            info=feat_info_[PARAMS['dev_set']], 
+            feature_name=PARAMS['feature_name']
+            ).load(dim=int(PARAMS['num_dim']))
+        IVec_.train_ubm(
+            FV_dev_,
+            ram_mem_req_,
+            cov_type=PARAMS['covariance_type']
             )
-        
-        '''
-        Training the GMM-UBM model
-        '''
-        ubm_fName = PARAMS['model_dir'] + '/ubm.pkl'
-        if not os.path.exists(ubm_fName):
-            FV_dev_, ram_mem_req_ = LoadFeatures(
-                info=feat_info_[PARAMS['dev_set']], 
-                feature_name=PARAMS['feature_name']
-                ).load(dim=int(PARAMS['num_dim']))
-            IVec_.train_ubm(
-                FV_dev_,
-                ram_mem_req_,
-                cov_type=PARAMS['covariance_type']
-                )
-        else:
-            print('The GMM-UBM is already available')
-        print('\n\n')
-
-
+    else:
+        print('The GMM-UBM is already available')
+    print('\n\n')
+    
+    IVec_.train_t_matrix(PARAMS)
 
 
 
@@ -61,7 +63,7 @@ GMM-UBM :: Speaker Verification System
 def gmm_ubm_sv(PARAMS):
     print('Creating a GaussianBackground model object')
     GB_ = GaussianBackground(
-        model_dir=PARAMS['model_dir'], 
+        model_dir=PARAMS['ubm_dir'], 
         opDir=PARAMS['output_dir'],
         num_mixtures=int(PARAMS['ubm_ncomponents']), 
         feat_scaling=int(PARAMS['feature_scaling']),
@@ -72,7 +74,7 @@ def gmm_ubm_sv(PARAMS):
     Training the GMM-UBM model
     '''
     print('Training the GMM-UBM model')
-    ubm_fName = PARAMS['model_dir'] + '/ubm.pkl'
+    ubm_fName = PARAMS['ubm_dir'] + '/ubm.pkl'
     if not os.path.exists(ubm_fName):
         FV_dev_, ram_mem_req_ = LoadFeatures(
             info=feat_info_[PARAMS['dev_set']], 
@@ -190,7 +192,7 @@ def __init__():
     parser.add_argument(
         '--model_type',
         type=str,
-        choices=['GMM-UBM'],
+        choices=['GMM-UBM', 'I-Vector'],
         default='GMM-UBM',
         help='Currently supports only GMM-UBM model',
         required=True,

@@ -159,7 +159,13 @@ def get_configurations():
         'data_path': section['data_path'],                          # Path to data set
         'output_path': section['output_path'],                      # Path where program output is to be stored
         'dataset_name': section['dataset_name'],                    # Name of the dataset
-        'ubm_memory_limit': section['ubm_memory_limit'],            # Memory limit to perform batch-wise UBM training
+        'ubm_memory_limit': int(section['ubm_memory_limit']),       # Memory limit to perform batch-wise UBM training
+
+        'nbThread': int(section['nbThread']),                       # Number of parallel threads
+        'distrib_nb': int(section['UBM_ncomp']),                    # Number of UBM components
+        'rank_TV': int(section['rank_TV']),                         # T-Matrix rank
+        'tv_iteration': int(section['tv_iteration']),               # Number of iterations for T-Matrix estimation
+        'batch_size': int(section['batch_size']),                   # Batch size
         }
     
     if CFG['FEATURE_NAME']=='MFCC':
@@ -179,6 +185,10 @@ def get_configurations():
     CFG['FEAT_DIR'] = CFG['OUTPUT_DIR'] + '/features/' + CFG['FEATURE_NAME'] + '/'
     if not os.path.exists(CFG['FEAT_DIR']):
         os.makedirs(CFG['FEAT_DIR'])
+
+    CFG['UBM_DIR'] = CFG['OUTPUT_DIR'] + '/models/' + CFG['FEATURE_NAME'] + '_GMM_UBM/'
+    if not os.path.exists(CFG['UBM_DIR']):
+        os.makedirs(CFG['UBM_DIR'])
 
     CFG['MODEL_DIR'] = CFG['OUTPUT_DIR'] + '/models/' + CFG['FEATURE_NAME'] + '_' + CFG['MODEL_TYPE'] + '/'
     if not os.path.exists(CFG['MODEL_DIR']):
