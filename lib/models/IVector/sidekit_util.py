@@ -22,13 +22,24 @@ from lib.models.IVector.statserver import StatServer
 def id_map_list(ubm_feat_dir):
     right_list = []
     left_list = []
+    print(f'ubm_feat_dir={ubm_feat_dir}')
 
-    for h5_file in os.listdir(ubm_feat_dir):
-        if h5_file.find('.h5') == -1:
+    # for h5_file in os.listdir(ubm_feat_dir):
+    #     if h5_file.find('.h5') == -1:
+    #         continue
+    #     show_name = h5_file.split('.h5')[0]
+    #     right_list.append(show_name)
+    #     left_list.append(show_name.split('.')[0])
+
+    for npy_file in os.listdir(ubm_feat_dir):
+        print(f'npy_file={npy_file}')
+        if npy_file.find('.npy') == -1:
             continue
-        show_name = h5_file.split('.h5')[0]
+        show_name = npy_file.split('.npy')[0]
+        print(f'show_name={show_name}')
         right_list.append(show_name)
         left_list.append(show_name.split('.')[0])
+
     return left_list, right_list
 
 

@@ -2007,23 +2007,30 @@ class StatServer:
             print(f'statserver: index={index}')
 
             if isinstance(index, sidekit.IdMap):
+                print('isinstance')
                 # create tuples of (model,seg) for both HDF5 and IdMap for quick comparaison
-                sst = [(mod, seg) for mod, seg in zip(h5f[prefix+"modelset"][()].astype('U', copy=False),
-                                                      h5f[prefix+"segset"][()].astype('U', copy=False))]
+                # sst = [(mod, seg) for mod, seg in zip(h5f[prefix+"modelset"][()].astype('U', copy=False), h5f[prefix+"segset"][()].astype('U', copy=False))]
                 imt = [(mod, seg) for mod, seg in zip(index.leftids, index.rightids)]
+                # print(f'sst={sst}')
+                # print(f'imt={imt}')
 
                 # Get indices of existing sessions
-                existing_sessions = set(sst).intersection(set(imt))
-                idx = numpy.sort(numpy.array([sst.index(session) for session in existing_sessions]).astype(int))
+                # existing_sessions = set(sst).intersection(set(imt))
+                # idx = numpy.sort(numpy.array([sst.index(session) for session in existing_sessions]).astype(int))
 
-                zero_vectors = numpy.argwhere(h5f['stat1'][()].sum(1) == 0)
-                idx = []
-                for ii, couple in enumerate(sst):
-                    if couple in existing_sessions and not ii in zero_vectors:
-                        idx.append(ii)
-                idx = numpy.array(idx)
+                existing_sessions = set(imt).intersection(set(imt))
+                idx = numpy.sort(numpy.array([imt.index(session) for session in existing_sessions]).astype(int))
+                # print(f'idx={idx}')
+
+                # zero_vectors = numpy.argwhere(h5f['stat1'][()].sum(1) == 0)
+                # idx = []
+                # for ii, couple in enumerate(sst):
+                #     if couple in existing_sessions and not ii in zero_vectors:
+                #         idx.append(ii)
+                # idx = numpy.array(idx)
 
             else:
+                print('not isinstance')
                 idx = numpy.array(index)
                 # If some indices are higher than the size of the StatServer, they are replace by the last index
                 idx = numpy.array([min(len(h5f[prefix+"modelset"]) - 1, idx[ii]) for ii in range(len(idx))])
@@ -2031,6 +2038,7 @@ class StatServer:
             # Create the new StatServer by loading the correct sessions
             statserver = sidekit.StatServer()
             print(f'statserver: idx {idx}')
+            print(h5f[prefix+"modelset"][()][idx].astype('U', copy=False))
             statserver.modelset = h5f[prefix+"modelset"][()][idx].astype('U', copy=False)
             statserver.segset = h5f[prefix+"segset"][()][idx].astype('U', copy=False)
 
