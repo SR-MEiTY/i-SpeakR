@@ -30,7 +30,8 @@ def ivector_sv(PARAMS):
         model_dir=PARAMS['model_dir'], 
         opDir=PARAMS['output_dir'],
         num_mixtures=int(PARAMS['ubm_ncomponents']), 
-        feat_scaling=int(PARAMS['feature_scaling'])
+        feat_scaling=int(PARAMS['feature_scaling']),
+        mem_limit=int(PARAMS['ubm_memory_limit'])
         )
     
     '''
@@ -51,8 +52,13 @@ def ivector_sv(PARAMS):
     else:
         print('The GMM-UBM is already available')
     print('\n\n')
+
+    FV_enr_, ram_mem_req_ = LoadFeatures(
+        info=feat_info_[PARAMS['enr_set']], 
+        feature_name=PARAMS['feature_name']
+        ).load(dim=int(PARAMS['num_dim']))
     
-    IVec_.train_t_matrix(PARAMS)
+    IVec_.train_t_matrix(FV_enr_)
 
 
 
@@ -187,16 +193,16 @@ def __init__():
         )
     # Adding the version information of the i-SpeakR toolkit
     parser.add_argument('-v', '--version', action='version', version='%(prog)s 0.1.1')
-    # Adding a switch for the path to a csv file containing the meta information of the dataset
-    # Adding switch to indicate the type of data
-    parser.add_argument(
-        '--model_type',
-        type=str,
-        choices=['GMM-UBM', 'I-Vector'],
-        default='GMM-UBM',
-        help='Currently supports only GMM-UBM model',
-        required=True,
-        )
+
+    # parser.add_argument(
+    #     '--model_type',
+    #     type=str,
+    #     choices=['GMM-UBM', 'I-Vector'],
+    #     default='GMM-UBM',
+    #     help='Currently supports only GMM-UBM model',
+    #     required=True,
+    #     )
+
     args = parser.parse_args()
     
     return args
@@ -211,18 +217,17 @@ if __name__ == '__main__':
     base_config.read('config.ini')
     opDir_ = base_config['MAIN']['output_path'] + '/i-SpeakR_output/' + base_config['MAIN']['dataset_name'] + '/'
 
-    PARAMS = configparser.ConfigParser()
-    PARAMS.read(opDir_+'/setup.ini')
-    PARAMS = PARAMS['EXECUTION_SETUP']    
+    base_config = configparser.ConfigParser()
+    base_config.read(opDir_+'/setup.ini')
+    PARAMS = dict(base_config['EXECUTION_SETUP']).copy()
     
     print('Feature details..')
     if PARAMS['feature_name']=='MFCC':
         feat_info_ = MFCC(config=PARAMS).get_feature_details()
         print('Feature details obtained')
     
-    
-    if args.model_type=='GMM-UBM':    
+    if PARAMS['model_type']=='gmm_ubm':    
         gmm_ubm_sv(PARAMS)
         
-    if args.model_type=='I-Vector':    
+    if PARAMS['model_type']=='i_vector':    
         ivector_sv(PARAMS)        

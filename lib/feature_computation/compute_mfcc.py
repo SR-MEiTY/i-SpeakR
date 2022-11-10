@@ -38,7 +38,7 @@ class MFCC:
         self.DEV_KEY = config['dev_key']
         self.ENR_KEY = config['enr_key']
         self.TEST_KEY = config['test_key']
-        self.DELTA_FEAT = config.getboolean('compute_delta_feat')
+        self.DELTA_FEAT = config['compute_delta_feat']
     
     
     def ener_mfcc(self, y, mfcc):

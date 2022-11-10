@@ -32,8 +32,9 @@ class IVector:
     N_BATCHES = 0
     
     
-    def __init__(self, ubm_dir, model_dir, opDir, num_mixtures=128, feat_scaling=0, num_iter=10):
+    def __init__(self, ubm_dir, model_dir, opDir, num_mixtures=128, feat_scaling=0, num_iter=10, mem_limit=5000):
         self.UBM_DIR = ubm_dir
+        self.MEM_LIMIT = mem_limit
         self.MODEL_DIR = model_dir
         self.OPDIR = opDir
         self.NCOMP = num_mixtures
@@ -168,46 +169,16 @@ class IVector:
 
         Returns
         -------
-        N : ndarray
-            Zeroeth-order statistics
-        F : ndarray
-            First-order statistics
+        N_ : ndarray
+            Zeroeth-order statistics for all utterance utterance
+        F_ : ndarray
+            First-order statistics for all utterance utterance
 
         '''
-
-        X_combined_ = np.empty([], dtype=np.float32)
-        speaker_count_ = 0
+        X_utterance_ = {}
         for speaker_id_ in X.keys():
-            split_count_ = 0
             for split_id_ in X[speaker_id_].keys():
-                if np.size(X_combined_)<=1:
-                    X_combined_ = np.array(X[speaker_id_][split_id_], dtype=np.float32)
-                else:
-                    X_combined_ = np.append(X_combined_, np.array(X[speaker_id_][split_id_], dtype=np.float32), axis=0)
-                split_count_ += 1
-            speaker_count_ += 1
-            print(f'Speaker-wise data combination: ({speaker_count_}/{len(X.keys())})', end='\r', flush=True)
-        print('')
-        print(f'Development data shape={np.shape(X_combined_)} data_type={X_combined_.dtype}')
-        
-
-        ''' Feature Scaling '''
-        if self.FEATURE_SCALING>0:
-            X_combined_ = np.empty([], dtype=np.float32)
-            for speaker_id_ in X.keys():
-                for split_id_ in X[speaker_id_].keys():
-                    if np.size(X_combined_)<=1:
-                        X_combined_ = np.array(X[speaker_id_][split_id_], dtype=np.float32)
-                    else:
-                        X_combined_ = np.append(X_combined_, np.array(X[speaker_id_][split_id_], dtype=np.float32), axis=0)
-    
-            if self.FEATURE_SCALING==1:
-                self.SCALER = StandardScaler(with_mean=True, with_std=False).fit(X_combined_)
-                X_combined_ = X_combined_.astype(np.float32)
-            elif self.FEATURE_SCALING==2:
-                self.SCALER = StandardScaler(with_mean=True, with_std=True).fit(X_combined_)
-                X_combined_ = X_combined_.astype(np.float32)
-
+                X_utterance_[split_id_] = np.array(X[speaker_id_][split_id_], dtype=np.float32)
 
         if not self.BACKGROUND_MODEL:
             ubm_fName_ = self.MODEL_DIR + '/ubm.pkl'
@@ -223,43 +194,27 @@ class IVector:
                 with open(ubm_fName_, 'rb') as f_:
                     self.BACKGROUND_MODEL = pickle.load(f_)
         
-        # Nc_ = {}
-        # Fc_ = {}
-        # for speaker_id_ in X.keys():
-        #     for split_id_ in X[speaker_id_].keys():
-        #         fv_ = None
-        #         del fv_
-                
-        #         # Load features
-        #         fv_ = X[speaker_id_][split_id_]
-                
-        #         # Compute a posteriori log-likelihood
-        #         log_lkdh_ = self.BACKGROUND_MODEL.predict_proba(fv_)
-                
-        #         # Compute a posteriori normalized probability
-        #         amax_ = np.max(log_lkdh_, axis=0)
-        #         norm_log_lkhd_ = np.subtract(log_lkdh_, np.repeat(np.array(amax_, ndmin=2), np.shape(log_lkdh_)[0], axis=0))
-        #         log_lkhd_sum_ = amax_ + np.log(np.sum(np.exp(norm_log_lkhd_), axis=0))
-        #         gamma_ = np.exp(np.subtract(log_lkdh_, np.repeat(np.array(log_lkhd_sum_, ndmin=2), np.shape(log_lkdh_)[0], axis=0)))
-                
-        #         # Compute Baum-Welch statistics
-        #         n_ = np.sum(gamma_, axis=0) # zeroeth-order
-        #         f_ = np.multiply(fv_.T, gamma_) # first-order
-                
-        #         Nc_[split_id_] = np.expand_dims(np.aray(n_, ndmin=2), axis=0)
-        #         Fc_[split_id_] = np.expand_dims(f_, axis=1)
-
-        # compute the GMM posteriors for the given data
-        gammas = self.BACKGROUND_MODEL.predict_proba(X_combined_) # n_samples, n_components
-        
-        # zero order stats for each Gaussian are just sum of the posteriors (soft counts)
-        N = np.sum(gammas, axis=0) # n_components
-        
-        # first order stats is just a (posterior) weighted sum
-        F = np.matmul(X_combined_.T, gammas) # n_dim, n_components
-        F = np.array(F.flatten(), ndmin=2).T # n_dim*n_component, 1
-
-        return N, F
+        N_ = {}
+        F_ = {}
+        # ncomp_ = self.BACKGROUND_MODEL.means_.shape[0]
+        # nfeat_ = self.BACKGROUND_MODEL.means_.shape[1]
+        split_count_ = 0
+        for split_id_ in X_utterance_.keys():
+            # compute the GMM posteriors for the given data
+            gammas_ = self.BACKGROUND_MODEL.predict_proba(X_utterance_[split_id_]) # n_samples, n_components
+            
+            # zero order stats for each Gaussian are just sum of the posteriors (soft counts)
+            Nc_ = np.sum(gammas_, axis=0) # n_components
+            # N_[split_id_] = np.tile(np.multiply(Nc_, np.eye(ncomp_)), [nfeat_, nfeat_])
+            N_[split_id_] = Nc_ # To save memory
+            
+            # first order stats is just a (posterior) weighted sum
+            Fc_ = np.matmul(X_utterance_[split_id_].T, gammas_) # n_dim, n_components
+            Fc_ = np.array(Fc_.flatten(), ndmin=2).T # n_dim*n_component, 1
+            F_[split_id_] = Fc_
+            split_count_ += 1
+            
+        return N_, F_
 
 
 
@@ -414,14 +369,7 @@ class IVector:
 
        
 
-    def write_list_to_txt(self, txt_file, tmp_list):
-        txt_data = ",".join(tmp_list)
-        with open(txt_file, "w") as f:
-            f.write(txt_data)
-
-
-        
-    def train_t_matrix(self, X_Enr, ivec_dim=100):
+    def train_t_matrix(self, X, ivec_dim=100):
         
         if not self.BACKGROUND_MODEL:
             ubm_fName_ = self.UBM_DIR + '/ubm.pkl'
@@ -463,35 +411,90 @@ class IVector:
         #     )
         
         m_ = self.BACKGROUND_MODEL.means_.flatten() # UBM Mean super-vector
+        Sigma_ = np.empty([], dtype=np.float32)
         if len(np.shape(self.BACKGROUND_MODEL.covariances_))==3:
-            E_ = np.zeros((np.shape(self.BACKGROUND_MODEL.covariances_)[0], np.shape(self.BACKGROUND_MODEL.covariances_)[1]))
+            Sigma_ = np.zeros((np.shape(self.BACKGROUND_MODEL.covariances_)[0], np.shape(self.BACKGROUND_MODEL.covariances_)[1]))
             for comp_i_ in range(np.shape(self.BACKGROUND_MODEL.covariances_)[0]):
-                E_[comp_i_,:] = np.diag(self.BACKGROUND_MODEL.covariances_[comp_i_,:,:])
+                Sigma_[comp_i_,:] = np.diag(self.BACKGROUND_MODEL.covariances_[comp_i_,:,:])
         else:
-            E_ = self.BACKGROUND_MODEL.covariances_
-        E_ = E_.flatten() # UBM Variance super-vector
+            Sigma_ = self.BACKGROUND_MODEL.covariances_
+        Sigma_ = Sigma_.flatten() # UBM Variance super-vector
         
-        spk_ids_ = X_Enr.keys()
+        spk_ids_ = X.keys()
         
         suf_stats_fName_ = self.MODEL_DIR+'/Sufficient_Stats.pkl'
         if not os.path.exists(suf_stats_fName_):
-            N_, F_ = self.Baum_Welch_Statistics(X_Enr)
+            N_, F_ = self.Baum_Welch_Statistics(X)
             with open(suf_stats_fName_, 'wb') as f_:
-                pickle.dump({'zeroeth_order':N_, 'first_order': F_}, f_, pickle.HIGHEST_PROTOCOL)
+                pickle.dump({'0th_order':N_, '1st_order': F_}, f_, pickle.HIGHEST_PROTOCOL)
         else:
             with open(suf_stats_fName_, 'rb') as f_:
-                N_ = pickle.load(f_)['zeroeth_order']
-                F_ = pickle.load(f_)['first_order']
+                stats_ = pickle.load(f_)
+                N_ = stats_['0th_order']
+                F_ = stats_['1st_order']
+        
+        print(f'0th order stats: {len(N_)}')
+        print(f'1st order stats: {len(F_)}')
         
         print('Initializing T matrix (randomly)')
-        T_ = (np.random.normal(loc=0.0, scale=1.0, size=(ivec_dim, np.shape(F_)[1])) @ E_) * 0.001
+        print(f'F_={np.shape(F_)} Sigma_={np.shape(Sigma_)}')
+        T_ = np.random.normal(loc=0.0, scale=0.0001, size=(np.shape(Sigma_)[0], ivec_dim))
+        T_ /= np.linalg.norm(T_)
+        print(f'T_ = {T_.shape}')
+        
         # we don't use the second order stats - set 'em to empty matrix
         S_ = []
+        
+        I = np.eye(ivec_dim)
+        Ey = {} # numSpeakers
+        Eyy = {} # numSpeakers
+        Linv = {} # numSpeakers
         
         # % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         
         n_speakers_ = len(spk_ids_)
         n_sessions_ = np.shape(spk_ids_)[0]
+        
+        for iter_i_ in range(self.N_ITER):
+            startTime = time.process_time()
+
+            # 1. Calculate the posterior distribution of the hidden variable
+            TtimesInverseSSdiag = np.divide(T, np.repeat(np.array(Sigma_, ndmin=2).T, ivec_dim, axis=1));
+            parfor s = 1:numSpeakers
+                L = (I + TtimesInverseSSdiag.*N{s}*T);
+                Linv{s} = pinv(L);
+                Ey{s} = Linv{s}*TtimesInverseSSdiag*F{s};
+                Eyy{s} = Linv{s} + Ey{s}*Ey{s}';
+            end
+            
+            # 2. Accumlate statistics across the speakers
+            Eymat = cat(2,Ey{:});
+            FFmat = cat(2,F{:});
+            Kt = FFmat*Eymat';
+            K = mat2cell(Kt',numTdim,repelem(numFeatures,numComponents));
+            
+            newT = cell(numComponents,1);
+            for c = 1:numComponents
+                AcLocal = zeros(numTdim);
+                for s = 1:numSpeakers
+                    AcLocal = AcLocal + Nc{s}(:,:,c)*Eyy{s};
+                end
+                
+            # 3. Update the Total Variability Space
+                newT{c} = (pinv(AcLocal)*K{c})';
+            end
+            T = cat(1,newT{:});
+            
+            disp("Training Total Variability Space: " + iterIdx + "/" + numIterations + " complete (" + round(toc,2) + " seconds).")
+
+
+            
+            print(f'Iteration: {iter_i_} CPU time: {time.process_time()-startTime}')
+        
+        
+        import sys
+        sys.exit(0)
+        
         
         # iteratively retrain v
         for ii in range(self.N_ITER):
@@ -505,6 +508,16 @@ class IVector:
             pickle.dump({'T_matrix':T_, 'speaker_factors_': w_}, f_, pickle.HIGHEST_PROTOCOL)
                 
         return w_, T_
+
+
+
+    def write_list_to_txt(self, txt_file, tmp_list):
+        txt_data = ",".join(tmp_list)
+        with open(txt_file, "w") as f:
+            f.write(txt_data)
+
+
+        
 
     
     

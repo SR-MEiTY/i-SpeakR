@@ -186,7 +186,7 @@ def get_configurations():
     if not os.path.exists(CFG['FEAT_DIR']):
         os.makedirs(CFG['FEAT_DIR'])
 
-    CFG['UBM_DIR'] = CFG['OUTPUT_DIR'] + '/models/' + CFG['FEATURE_NAME'] + '_GMM_UBM/'
+    CFG['UBM_DIR'] = CFG['OUTPUT_DIR'] + '/models/' + CFG['FEATURE_NAME'] + '_gmm_ubm/'
     if not os.path.exists(CFG['UBM_DIR']):
         os.makedirs(CFG['UBM_DIR'])
 
