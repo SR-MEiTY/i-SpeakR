@@ -144,8 +144,8 @@ class IVector:
                     print(f'Singleton component error. Reducing reg_covar to {np.round(reg_covar_,6)}')
         
         ubm_fName = self.MODEL_DIR + '/ubm.pkl'
-        with open(ubm_fName, 'wb') as f:
-            pickle.dump({'model':self.BACKGROUND_MODEL, 'scaler':self.SCALER}, f, pickle.HIGHEST_PROTOCOL)
+        with open(ubm_fName, 'wb') as f_:
+            pickle.dump({'model':self.BACKGROUND_MODEL, 'scaler':self.SCALER}, f_, pickle.HIGHEST_PROTOCOL)
         
         return
 
@@ -210,6 +210,7 @@ class IVector:
             
             # first order stats is just a (posterior) weighted sum
             Fc_ = np.matmul(X_utterance_[split_id_].T, gammas_) # n_dim, n_components
+            Fc_ -= np.multiply(np.repeat(np.array(Nc_, ndmin=2), self.BACKGROUND_MODEL.means_.shape[1], axis=0), self.BACKGROUND_MODEL.means_).T
             Fc_ = np.array(Fc_.flatten(), ndmin=2).T # n_dim*n_component, 1
             F_[split_id_] = Fc_
             split_count_ += 1
@@ -344,7 +345,7 @@ class IVector:
                 for c in range(np.shape(N)[1]):
                     L = L + np.multiply(vEvT[c], Nss[c])
                     
-                invL = np.linalg.inv(L)
+                invL = np.linalg.pinv(L)
                 y[ii, :] = ((np.divide(Fs, E)) @ v) @ invL
                 # if nargout > 1
                 invL = invL + (y[ii,:] @ y[ii,:])
@@ -363,13 +364,13 @@ class IVector:
         dim = int(np.shape(C)[1]/len(A))
         for c in range(len(A)):
             c_elements = list(range(c*dim, ((c+1)*dim)))
-            C[:,c_elements] = np.linalg.inv(A[c]) @ C[:,c_elements]
+            C[:,c_elements] = np.linalg.pinv(A[c]) @ C[:,c_elements]
         
         return C
 
        
 
-    def train_t_matrix(self, X, ivec_dim=100):
+    def train_t_matrix(self, X, tv_fName, ivec_dim=100):
         
         if not self.BACKGROUND_MODEL:
             ubm_fName_ = self.UBM_DIR + '/ubm.pkl'
@@ -386,31 +387,7 @@ class IVector:
                     self.BACKGROUND_MODEL = pickle.load(f_)
         print('Background model loaded')
         
-        # enr_feat_dir_ = PARAMS['feat_dir'] + '/' + list(filter(None, PARAMS['dev_path'].split('/')))[-1] + '/'
-        # leftlist, rightlist = sidekit_util.id_map_list(enr_feat_dir_)
-        # self.write_list_to_txt(os.path.join(PARAMS['output_dir'], 'left_list.txt'), leftlist)
-        # self.write_list_to_txt(os.path.join(PARAMS['output_dir'], 'right_list.txt'), rightlist)
-    
-        # tv_idmap = sidekit_util.get_id_map(leftlist, rightlist)
-        
-        # stat_file = PARAMS['output_dir'] + '/stat_ubm_tv_' + str(PARAMS['distrib_nb']) + '.h5'
-        # self.train_tv_matrix(PARAMS, self.BACKGROUND_MODEL, stat_file)
-        
-        # tv_stat = StatServer.read_subset(stat_file, tv_idmap)
-        # tv_mean, tv, _, __, tv_sigma = tv_stat.factor_analysis(
-        #     rank_f=int(PARAMS['rank_TV']),
-        #     rank_g=0,
-        #     rank_h=None,
-        #     re_estimate_residual=False,
-        #     it_nb=(int(PARAMS['tv_iteration']), 0, 0),
-        #     min_div=True,
-        #     ubm=self.BACKGROUND_MODEL,
-        #     batch_size=int(PARAMS['batch_size']),
-        #     num_thread=int(PARAMS['nbThread']),
-        #     save_partial=PARAMS['tv_path'],
-        #     )
-        
-        m_ = self.BACKGROUND_MODEL.means_.flatten() # UBM Mean super-vector
+        Mu_ = self.BACKGROUND_MODEL.means_ # UBM Mean super-vector
         Sigma_ = np.empty([], dtype=np.float32)
         if len(np.shape(self.BACKGROUND_MODEL.covariances_))==3:
             Sigma_ = np.zeros((np.shape(self.BACKGROUND_MODEL.covariances_)[0], np.shape(self.BACKGROUND_MODEL.covariances_)[1]))
@@ -433,81 +410,175 @@ class IVector:
                 N_ = stats_['0th_order']
                 F_ = stats_['1st_order']
         
-        print(f'0th order stats: {len(N_)}')
-        print(f'1st order stats: {len(F_)}')
+        # print(f'0th order stats: {len(N_)}')
+        # print(f'1st order stats: {len(F_)}')
         
         print('Initializing T matrix (randomly)')
-        print(f'F_={np.shape(F_)} Sigma_={np.shape(Sigma_)}')
-        T_ = np.random.normal(loc=0.0, scale=0.0001, size=(np.shape(Sigma_)[0], ivec_dim))
-        T_ /= np.linalg.norm(T_)
-        print(f'T_ = {T_.shape}')
+        # print(f'F_={np.shape(F_)} Sigma_={np.shape(Sigma_)}')
+        T_mat_ = np.random.normal(loc=0.0, scale=0.0001, size=(np.shape(Sigma_)[0], ivec_dim))
+        T_mat_ /= np.linalg.norm(T_mat_) # (19968 x 100)
+        # print(f'T_mat_ = {T_mat_.shape}')
         
         # we don't use the second order stats - set 'em to empty matrix
         S_ = []
-        
-        I = np.eye(ivec_dim)
-        Ey = {} # numSpeakers
-        Eyy = {} # numSpeakers
-        Linv = {} # numSpeakers
-        
-        # % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        
+
         n_speakers_ = len(spk_ids_)
-        n_sessions_ = np.shape(spk_ids_)[0]
+        # n_sessions_ = np.shape(spk_ids_)[0]
+        n_feat_ = Mu_.shape[1]
+        n_comp_ = Mu_.shape[0]
         
+        I_ = np.eye(ivec_dim)
+        # print(f'I_={I_.shape}')
+        Ey_ = {} # numSpeakers_
+        Eyy_ = {} # numSpeakers_
+        Linv_ = {} # numSpeakers_
+                
         for iter_i_ in range(self.N_ITER):
             startTime = time.process_time()
 
             # 1. Calculate the posterior distribution of the hidden variable
-            TtimesInverseSSdiag = np.divide(T, np.repeat(np.array(Sigma_, ndmin=2).T, ivec_dim, axis=1));
-            parfor s = 1:numSpeakers
-                L = (I + TtimesInverseSSdiag.*N{s}*T);
-                Linv{s} = pinv(L);
-                Ey{s} = Linv{s}*TtimesInverseSSdiag*F{s};
-                Eyy{s} = Linv{s} + Ey{s}*Ey{s}';
-            end
+            TtimesInverseSSdiag_ = np.divide(T_mat_, np.repeat(np.array(Sigma_, ndmin=2).T, ivec_dim, axis=1)+1e-10).T # (19968 x 100)
+            # print(f'TtimesInverseSSdiag_={np.shape(TtimesInverseSSdiag_)}')
             
+            for s_ in N_.keys():
+                # print(f'N_[s_]={N_[s_].shape}')
+                Nc_ = np.repeat(np.array(np.tile(N_[s_], [n_feat_]), ndmin=2), ivec_dim, axis=0)
+                # print(f'I_={I_.shape} TtimesInverseSSdiag_={TtimesInverseSSdiag_.shape}, Nc_={Nc_.shape} T_mat_={T_mat_.shape}')
+                L_ = I_ + (np.multiply(TtimesInverseSSdiag_, Nc_) @ T_mat_)
+                # print(f'L_={L_.shape}')
+                Linv_[s_] = np.linalg.pinv(L_)
+                # print(f'Linv_={Linv_[s_].shape}')
+                Ey_[s_] = Linv_[s_] @ TtimesInverseSSdiag_ @ F_[s_]
+                # print(f'Ey_={Ey_[s_].shape}')
+                Eyy_[s_] = Linv_[s_] + Ey_[s_] @ Ey_[s_].T
+                # print(f'Eyy_={Eyy_[s_].shape}')
+
             # 2. Accumlate statistics across the speakers
-            Eymat = cat(2,Ey{:});
-            FFmat = cat(2,F{:});
-            Kt = FFmat*Eymat';
-            K = mat2cell(Kt',numTdim,repelem(numFeatures,numComponents));
+            Eymat_ = []
+            for s_ in Ey_.keys():
+                Eymat_.append(Ey_[s_].flatten())
+            # print(f'Eymat_={np.shape(Eymat_)}')
+            FFmat_ = []
+            for s_ in F_.keys():
+                FFmat_.append(F_[s_].flatten())
+            # print(f'FFmat_={np.shape(FFmat_)}')
+            Kt_ = np.array(FFmat_, ndmin=2).T @ np.array(Eymat_, ndmin=2) # (19968, 100)
+            # print(f'Kt_={np.shape(Kt_)}')
             
-            newT = cell(numComponents,1);
-            for c = 1:numComponents
-                AcLocal = zeros(numTdim);
-                for s = 1:numSpeakers
-                    AcLocal = AcLocal + Nc{s}(:,:,c)*Eyy{s};
-                end
+            K_ = {}
+            for dim_i_ in range(ivec_dim):
+                K_[dim_i_] = np.reshape(Kt_[:, dim_i_], newshape=(n_feat_, n_comp_)) # (39, 512)
+                # print(f'{s_} {K[s_].shape}')
+
+            newT_ = {}
+            for c_ in range(n_comp_):
+                AcLocal_ = np.zeros((ivec_dim, ivec_dim)) # (100, 100)
+                for s_ in Eyy_.keys():
+                    Nc_ = np.repeat(np.array(N_[s_], ndmin=2), ivec_dim, axis=0)
+                    # print(f'N_[s_] {N_[s_].shape} Nc_={Nc_.shape}')
+                    # print(f'Eyy_[s_] {Eyy_[s_].shape}')
+                    AcLocal_ += Nc_[:, c_] @ Eyy_[s_]
+                    # print(f'AcLocal_ {AcLocal_.shape}')
+
+                # 3. Update the Total Variability Space
+                Kc_ = np.empty([])
+                for dim_i_ in range(ivec_dim):
+                    K_temp_ = np.array(K_[dim_i_][:,c_], ndmin=2)
+                    if np.size(Kc_)<=1:
+                        Kc_ = K_temp_
+                    else:
+                        Kc_ = np.append(Kc_, K_temp_, axis=0)
+                # print(f'Kc_: {Kc_.shape}')
+                newT_[c_] = (np.linalg.pinv(AcLocal_) @ Kc_).T # (39, 100)
+                # print(f'newT_[c_]: {newT_[c_].shape}')
+            
+            for dim_i_ in range(ivec_dim):
+                T_col_ = []
+                for c_ in range(n_comp_):
+                    T_col_.extend(newT_[c_][:, dim_i_].flatten())
+                # print(f'{dim_i_} T_col_={np.shape(T_col_)}')
+                T_mat_[:, dim_i_] = np.array(T_col_)
+            # print(f'T_mat_: {np.shape(T_mat_)}')
+
+            print(f"Training Total Variability Space: {iter_i_} / {self.N_ITER} complete ({np.round(time.process_time()-startTime,2)} seconds).")
+
+        with open(tv_fName, 'wb') as f_:
+            pickle.dump({'tv_mat':T_mat_}, f_, pickle.HIGHEST_PROTOCOL)
+
+        return
                 
-            # 3. Update the Total Variability Space
-                newT{c} = (pinv(AcLocal)*K{c})';
-            end
-            T = cat(1,newT{:});
+
+
+    def extract_ivector(self, X_Enr, tv_fName, opDir):
+        
+        if not self.BACKGROUND_MODEL:
+            ubm_fName_ = self.UBM_DIR + '/ubm.pkl'
+            if not os.path.exists(ubm_fName_):
+                print('Background model does not exist')
+                return
+            try:
+                with open(ubm_fName_, 'rb') as f_:
+                    self.BACKGROUND_MODEL = pickle.load(f_)['model']
+                with open(ubm_fName_, 'rb') as f_:
+                    self.SCALER = pickle.load(f_)['scaler']
+            except:
+                with open(ubm_fName_, 'rb') as f_:
+                    self.BACKGROUND_MODEL = pickle.load(f_)
+        print('Background model loaded')
+        
+        with open(tv_fName, 'rb') as f_:
+            TV = pickle.load(f_)
+            TV = TV['tv_mat']
+
+        Mu_ = self.BACKGROUND_MODEL.means_ # UBM Mean super-vector (n_comp_, n_feat_)
+        Sigma_ = np.empty([], dtype=np.float32)
+        if len(np.shape(self.BACKGROUND_MODEL.covariances_))==3:
+            Sigma_ = np.zeros((np.shape(self.BACKGROUND_MODEL.covariances_)[0], np.shape(self.BACKGROUND_MODEL.covariances_)[1]))
+            for comp_i_ in range(np.shape(self.BACKGROUND_MODEL.covariances_)[0]):
+                Sigma_[comp_i_,:] = np.diag(self.BACKGROUND_MODEL.covariances_[comp_i_,:,:])
+        else:
+            Sigma_ = self.BACKGROUND_MODEL.covariances_
+        Sigma_ = Sigma_.flatten() # UBM Variance super-vector
+        ivec_dim_ = TV.shape[1] # (100,)
+
+        speaker_count_ = 0
+        for speaker_id_ in X_Enr.keys():
+            ivec_fName_ = opDir + '/' + speaker_id_ + '.pkl'
+            if os.path.exists(ivec_fName_):
+                print(f'I-vector already computed for {speaker_id_}')
+                continue
             
-            disp("Training Total Variability Space: " + iterIdx + "/" + numIterations + " complete (" + round(toc,2) + " seconds).")
-
-
-            
-            print(f'Iteration: {iter_i_} CPU time: {time.process_time()-startTime}')
-        
-        
-        import sys
-        sys.exit(0)
-        
-        
-        # iteratively retrain v
-        for ii in range(self.N_ITER):
-            startTime = time.process_time()
-            print(f'Starting iteration: {ii}')
-            w_, T_ = self.estimate_y_and_v(F_, N_, S_, m_, E_, 0, T_, 0, np.zeros(n_speakers_), 0, np.zeros(n_sessions_), spk_ids_)
-            print(f'Iteration: {ii} CPU time: {time.process_time()-startTime}')
-
-        T_matrix_fName_ = self.MODEL_DIR+'/T_matrix.pkl'
-        with open(T_matrix_fName_, 'wb') as f_:
-            pickle.dump({'T_matrix':T_, 'speaker_factors_': w_}, f_, pickle.HIGHEST_PROTOCOL)
+            I_vectors_ = np.zeros((len(X_Enr[speaker_id_]), ivec_dim_))
+            speaker_count_ = 0
+            for split_id_ in X_Enr[speaker_id_].keys():
+                X_ = X_Enr[speaker_id_][split_id_] # (1280, 39)
+                lld_ = self.BACKGROUND_MODEL.predict_proba(X_) # (1280, 512)
+                # Compute a posteriori normalized probability
+                amax = np.max(lld_, axis=0) # (512,)
+                amax_arr = np.repeat(np.array(amax, ndmin=2), np.shape(lld_)[0], axis=0) # (1280, 512)
+                lld_sum_ = amax + np.log(np.sum(np.exp(np.subtract(lld_,amax_arr)), axis=0)) # (512,)
+                gamma_ = np.exp(np.subtract(lld_, np.repeat(np.array(lld_sum_, ndmin=2), lld_.shape[0], axis=0))) # (512, 1280)
+                        
+                # Compute Baum-Welch statistics
+                n_ = np.sum(gamma_, axis=0) # (1280,)                
+                f_ = X_.T @ gamma_ - np.multiply(np.repeat(np.array(n_, ndmin=2), Mu_.shape[1], axis=0), Mu_.T) # ((39, 512))
                 
-        return w_, T_
+                TS_ = np.divide(TV, np.repeat(np.array(Sigma_, ndmin=2).T, TV.shape[1], axis=1)) # (19968, 100)
+                TSi_ = TS_.T # (19968, 100)
+                I_ = np.eye(ivec_dim_) # (100, 100)
+                n_feat_ = Mu_.shape[1] # 39
+                TS_temp_ = np.multiply(TS_, np.repeat(np.array(np.tile(n_, [n_feat_]), ndmin=2).T, ivec_dim_, axis=1)) # (19968, 100)
+                w_ = np.linalg.pinv(I_ + TS_temp_.T @ TV) @ TSi_ @ f_.flatten()
+                # print(f'w_={np.shape(w_)} speaker_count_={speaker_count_}')
+                
+                I_vectors_[speaker_count_,:] = w_
+                speaker_count_ += 1
+            
+            with open(ivec_fName_, 'wb') as f_:
+                pickle.dump(I_vectors_, f_, pickle.HIGHEST_PROTOCOL)
+        
+        return
+
 
 
 

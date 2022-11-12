@@ -53,12 +53,28 @@ def ivector_sv(PARAMS):
         print('The GMM-UBM is already available')
     print('\n\n')
 
+
+    '''
+    Estimating the Total Variability matrix
+    '''
+    tv_mat_fName_ = PARAMS['model_dir'] + '/tv_mat.pkl'
+    if not os.path.exists(tv_mat_fName_):
+        FV_dev_, ram_mem_req_ = LoadFeatures(
+            info=feat_info_[PARAMS['dev_set']], 
+            feature_name=PARAMS['feature_name']
+            ).load(dim=int(PARAMS['num_dim']))
+        IVec_.train_t_matrix(FV_dev_, tv_mat_fName_)
+    else:
+        print('The Total Variability matrix is already trained')
+    print('\n\n')
+    
+    
     FV_enr_, ram_mem_req_ = LoadFeatures(
         info=feat_info_[PARAMS['enr_set']], 
         feature_name=PARAMS['feature_name']
         ).load(dim=int(PARAMS['num_dim']))
-    
-    IVec_.train_t_matrix(FV_enr_)
+    IVec_.extract_ivector(FV_enr_, tv_mat_fName_, PARAMS['model_dir'])
+
 
 
 
