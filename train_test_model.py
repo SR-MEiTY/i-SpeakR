@@ -69,11 +69,21 @@ def ivector_sv(PARAMS):
     print('\n\n')
     
     
+    '''
+    Extracting I-Vectors
+    '''
     FV_enr_, ram_mem_req_ = LoadFeatures(
         info=feat_info_[PARAMS['enr_set']], 
         feature_name=PARAMS['feature_name']
         ).load(dim=int(PARAMS['num_dim']))
     IVec_.extract_ivector(FV_enr_, tv_mat_fName_, PARAMS['model_dir'])
+
+
+    '''
+    PLDA Training
+    '''
+    IVec_.plda_training(FV_enr_, PARAMS['model_dir'])
+
 
 
 

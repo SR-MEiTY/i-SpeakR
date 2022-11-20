@@ -4,15 +4,12 @@
 Created on Thu Aug  4 18:31:50 2022
 
 @author: Mrinmoy Bhattacharjee, Senior Project Engineer, Dept. of EE, IIT Dharwad
-@collaborator: Dr. Gayadhar Pradhan, Assoc. Prof., NIT Patna
+@code source: Dr. Gayadhar Pradhan, Assoc. Prof., NIT Patna (Matlab version)
 """
 
 from sklearn.mixture import GaussianMixture
 import numpy as np
 from lib.models.GMM_UBM.speaker_adaptation import SpeakerAdaptation
-# from lib.models.IVector import sidekit_util
-# from lib.models.IVector.statserver import StatServer
-# import sidekit
 import pickle
 import os
 from sklearn.preprocessing import StandardScaler
@@ -20,6 +17,7 @@ from lib.metrics.performance_metrics import PerformanceMetrics
 import psutil
 import sys
 import time
+from lib.models.IVector.gplda import GPLDA_computation
 
 
 class IVector:
@@ -527,8 +525,8 @@ class IVector:
         print('Background model loaded')
         
         with open(tv_fName, 'rb') as f_:
-            TV = pickle.load(f_)
-            TV = TV['tv_mat']
+            TV_ = pickle.load(f_)
+            TV_ = TV_['tv_mat']
 
         Mu_ = self.BACKGROUND_MODEL.means_ # UBM Mean super-vector (n_comp_, n_feat_)
         Sigma_ = np.empty([], dtype=np.float32)
@@ -539,9 +537,8 @@ class IVector:
         else:
             Sigma_ = self.BACKGROUND_MODEL.covariances_
         Sigma_ = Sigma_.flatten() # UBM Variance super-vector
-        ivec_dim_ = TV.shape[1] # (100,)
+        ivec_dim_ = TV_.shape[1] # (100,)
 
-        speaker_count_ = 0
         for speaker_id_ in X_Enr.keys():
             ivec_fName_ = opDir + '/' + speaker_id_ + '.pkl'
             if os.path.exists(ivec_fName_):
@@ -549,7 +546,7 @@ class IVector:
                 continue
             
             I_vectors_ = np.zeros((len(X_Enr[speaker_id_]), ivec_dim_))
-            speaker_count_ = 0
+            utter_count_ = 0
             for split_id_ in X_Enr[speaker_id_].keys():
                 X_ = X_Enr[speaker_id_][split_id_] # (1280, 39)
                 lld_ = self.BACKGROUND_MODEL.predict_proba(X_) # (1280, 512)
@@ -563,21 +560,34 @@ class IVector:
                 n_ = np.sum(gamma_, axis=0) # (1280,)                
                 f_ = X_.T @ gamma_ - np.multiply(np.repeat(np.array(n_, ndmin=2), Mu_.shape[1], axis=0), Mu_.T) # ((39, 512))
                 
-                TS_ = np.divide(TV, np.repeat(np.array(Sigma_, ndmin=2).T, TV.shape[1], axis=1)) # (19968, 100)
+                TS_ = np.divide(TV_, np.repeat(np.array(Sigma_, ndmin=2).T, TV_.shape[1], axis=1)) # (19968, 100)
                 TSi_ = TS_.T # (19968, 100)
                 I_ = np.eye(ivec_dim_) # (100, 100)
                 n_feat_ = Mu_.shape[1] # 39
                 TS_temp_ = np.multiply(TS_, np.repeat(np.array(np.tile(n_, [n_feat_]), ndmin=2).T, ivec_dim_, axis=1)) # (19968, 100)
-                w_ = np.linalg.pinv(I_ + TS_temp_.T @ TV) @ TSi_ @ f_.flatten()
+                w_ = np.linalg.pinv(I_ + TS_temp_.T @ TV_) @ TSi_ @ f_.flatten()
                 # print(f'w_={np.shape(w_)} speaker_count_={speaker_count_}')
                 
-                I_vectors_[speaker_count_,:] = w_
-                speaker_count_ += 1
+                I_vectors_[utter_count_,:] = w_
+                utter_count_ += 1
             
             with open(ivec_fName_, 'wb') as f_:
                 pickle.dump(I_vectors_, f_, pickle.HIGHEST_PROTOCOL)
         
         return
+    
+    
+    def plda_training(self, X_Enr, ivec_dir):
+        ivector_per_speaker_ = {}
+        for speaker_id_ in X_Enr.keys():
+            ivec_fName_ = ivec_dir + '/' + speaker_id_ + '.pkl'
+            with open(ivec_fName_, 'rb') as f_:
+                I_vectors_ = pickle.load(f_)
+                ivector_per_speaker_[speaker_id_] = I_vectors_.T
+                print(f'speaker={speaker_id_} ivector={np.shape(ivector_per_speaker_[speaker_id_])}')
+
+        gpldaModel_, projectionMatrix_ = GPLDA_computation(ivector_per_speaker_, lda_dim=20, perform_LDA=True, perform_WCCN=True, num_iter=50)
+
 
 
 
