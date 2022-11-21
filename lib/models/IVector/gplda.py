@@ -68,81 +68,71 @@ def GPLDA_computation(ivector_per_speaker, lda_dim=20, perform_LDA=False, perfor
     # % if performLDA is false, pass lda_dim as some dommy value, it will never
     # % be used, else provide appropriate dimension
     
-    # w = ivector_per_speaker
-    ivec_dim_ = np.shape(ivector_per_speaker[list(ivector_per_speaker.keys())[0]])[0]
+    w_ = ivector_per_speaker
+    ivec_dim_ = np.shape(w_[list(w_.keys())[0]])[0]
     
     utterance_per_speaker_ = {}
     ivectors_train_ = np.empty([], dtype=np.float32)
-    for speaker_id_ in ivector_per_speaker.keys():
+    for speaker_id_ in w_.keys():
         utterance_per_speaker_[speaker_id_] = {}
         if np.size(ivectors_train_)<=1:
             utterance_per_speaker_[speaker_id_]['start'] = 0
-            ivectors_train_ = ivector_per_speaker[speaker_id_]
+            ivectors_train_ = w_[speaker_id_]
             utterance_per_speaker_[speaker_id_]['end'] = np.shape(ivectors_train_)[1]
         else:
             utterance_per_speaker_[speaker_id_]['start'] = np.shape(ivectors_train_)[1]
-            ivectors_train_ = np.append(ivectors_train_, ivector_per_speaker[speaker_id_], axis=1)
+            ivectors_train_ = np.append(ivectors_train_, w_[speaker_id_], axis=1)
             utterance_per_speaker_[speaker_id_]['end'] = np.shape(ivectors_train_)[1]
     
     
-    '''
-    LDA Computation
-    '''
+    '''~~~~~~~~~~~~~~~~~~ LDA Computation ~~~~~~~~~~~~~~~~~ '''
     projectionMatrix_ = np.eye(ivec_dim_)
-    # performLDA = true;
-    w_ = {}
     if perform_LDA:
         startTime = time.process_time()
-        A_ = LDA_computation(ivector_per_speaker, ivectors_train_, ivec_dim_, lda_dim)
+        A_ = LDA_computation(w_, ivectors_train_, ivec_dim_, lda_dim)
+        print(f'A_={np.shape(A_)}')
+        print(f'ivectors_train_={np.shape(ivectors_train_)}')
         ivectors_train_ = A_ @ ivectors_train_
-        for speaker_id_ in ivector_per_speaker.keys():
+        print(f'ivectors_train_={np.shape(ivectors_train_)}')
+        for speaker_id_ in w_.keys():
             w_[speaker_id_] = ivectors_train_[:, utterance_per_speaker_[speaker_id_]['start']:utterance_per_speaker_[speaker_id_]['end']]
         projectionMatrix_ = A_ @ projectionMatrix_
         print(f"LDA projection matrix calculated {np.round(time.process_time()-startTime,2)} seconds). projectionMatrix_={np.shape(projectionMatrix_)}")
     
     
-    '''
-    WCCN computation
-    '''
-    #performWCCN = true;
+    '''~~~~~~~~~~~~~~~~~~ WCCN computation ~~~~~~~~~~~~~~~~~ '''
     if perform_WCCN:
         startTime = time.process_time()
-        B_ = WCCN_computation(ivector_per_speaker, ivec_dim_)
-        print(f'B_={np.shape(B_)}')
-        print(f'projectionMatrix_={np.shape(projectionMatrix_)}')
-        projectionMatrix_ = (B_ @ projectionMatrix_.T).T
+        B_ = WCCN_computation(w_, np.min([ivec_dim_, lda_dim]))
+        projectionMatrix_ = (B_ @ projectionMatrix_)
         print(f"WCCN projection matrix calculated {np.round(time.process_time()-startTime,2)} seconds). projectionMatrix_={np.shape(projectionMatrix_)}")
     
     
     ivectors_ = {}
-    for speaker_id_ in ivector_per_speaker.keys():
-        ivectors_[speaker_id_] = projectionMatrix_@ivector_per_speaker[speaker_id_]
-        print(f'speaker wise ivectors {speaker_id_} {np.shape(ivectors_[speaker_id_])}')
-    numEigenVoices_ = len(ivectors_) # check what is eigen voice may be 2
-    
-    '''
-    Working till here
-    '''
-    sys.exit(0)
+    for speaker_id_ in w_.keys():
+        ivectors_[speaker_id_] = projectionMatrix_.T @ w_[speaker_id_]
+    num_eigen_voices_ = len(ivectors_) # check what is eigen voice may be 2
 
-    K_ = len(ivectors_)
-    D_ = ivec_dim_
-    ivectorsMatrix_ = np.empty([], dtype=np.float32)
+
+    K_ = len(ivectors_) # number of speakers
+    D_ = ivec_dim_ # ivector dimension
+    ivectors_all_ = np.empty([], dtype=np.float32)
     utterance_per_speaker_ = {}
     for speaker_id_ in ivectors_.keys():
-        if np.size(ivectorsMatrix_)<=1:
+        utterance_per_speaker_[speaker_id_] = {}
+        if np.size(ivectors_all_)<=1:
             utterance_per_speaker_[speaker_id_]['start'] = 0
-            ivectorsMatrix_ = ivectors_[speaker_id_]
-            utterance_per_speaker_[speaker_id_]['end'] = np.shape(ivectorsMatrix_)[1]
+            ivectors_all_ = ivectors_[speaker_id_]
+            utterance_per_speaker_[speaker_id_]['end'] = np.shape(ivectors_all_)[1]
         else:
-            utterance_per_speaker_[speaker_id_]['start'] = np.shape(ivectorsMatrix_)[1]
-            ivectorsMatrix_ = np.append(ivectorsMatrix_, ivectors_[speaker_id_], axis=1)
-            utterance_per_speaker_[speaker_id_]['end'] = np.shape(ivectorsMatrix_)[1]
-    N_ = np.shape(ivectorsMatrix_)[1]
-    mu_ = np.mean(ivectorsMatrix_, axis=1)
-    
-    ivectorsMatrix_ = np.subtract(ivectorsMatrix_, np.repeat(np.array(mu_, ndmin=2), np.shape(ivectorsMatrix_)[0], axis=0))
-    
+            utterance_per_speaker_[speaker_id_]['start'] = np.shape(ivectors_all_)[1]
+            ivectors_all_ = np.append(ivectors_all_, ivectors_[speaker_id_], axis=1)
+            utterance_per_speaker_[speaker_id_]['end'] = np.shape(ivectors_all_)[1]
+    N_ = np.shape(ivectors_all_)[1] # Number of ivectors
+    mu_ = np.mean(ivectors_all_, axis=1) # Mean ivectors
+    mu_repeat_ = np.repeat(np.array(mu_, ndmin=2).T, np.shape(ivectors_all_)[1], axis=1)
+    ivectors_all_ = np.subtract(ivectors_all_, mu_repeat_)
+
     
     '''
     Whitening ZCA (Ensures the covariance matrix to Identity)
@@ -151,72 +141,81 @@ def GPLDA_computation(ivector_per_speaker, lda_dim=20, perform_LDA=False, perfor
     eps_ = sys.float_info.epsilon
     
     if whiteningType=='ZCA':
-        S_ = np.linalg.cov(ivectorsMatrix_.T)
+        S_ = np.cov(ivectors_all_)
         _, sD_, sV_ = np.linalg.svd(S_)
-        W_ = np.array(np.diag((np.sqrt(np.diag(sD_)) + eps_)**-1), ndmin=2) @ sV_.T
-        ivectorsMatrix_ = W_ @ ivectorsMatrix_
+        W_ = np.repeat(np.array((np.sqrt(sD_) + eps_)**-1, ndmin=2).T, ivectors_all_.shape[0], axis=1) @ sV_.T
+        ivectors_all_ = W_ @ ivectors_all_
         
     elif whiteningType=='PCA':
-        S_ = np.linalg.cov(ivectorsMatrix_.T)
-        sV_, sD_ = np.linalg.eig(S_)
-        W_ = np.array(np.diag((np.sqrt(np.diag(sD_)) + eps_)**-1), ndmin=2) @ sV_.T
-        ivectorsMatrix_ = W_ @ ivectorsMatrix_
+        S_ = np.cov(ivectors_all_)
+        sD_, sV_ = np.linalg.eig(S_)
+        sD__ = np.repeat(np.array((np.sqrt(sD_) + eps_)**-1, ndmin=2).T, ivectors_all_.shape[0], axis=1)
+        W_ = sD__ @ sV_.T
+        ivectors_all_ = W_ @ ivectors_all_
 
     else:
         W_ = np.eye(ivec_dim_)
+        
+    print(f'Whitening: ivectors_all_={np.shape(ivectors_all_)} W_={np.shape(W_)}')
 
-    ivectorsMatrix_ = np.divide(ivectorsMatrix_, np.repeat(np.array(np.linalg.norm(ivectorsMatrix_), ndmin=2), np.shape(ivectorsMatrix_)[0], axis=0)).T
-    S_ = ivectorsMatrix_ @ ivectorsMatrix_.T
+
+    ivectors_all_ = np.divide(ivectors_all_, np.repeat(np.array(np.linalg.norm(ivectors_all_), ndmin=2), np.shape(ivectors_all_)[0], axis=0))
+    S_ = ivectors_all_ @ ivectors_all_.T
     ivectors_ = {}
-    for speaker_id_ in ivector_per_speaker.keys():
-        ivectors_[speaker_id_] = ivectorsMatrix_[:, utterance_per_speaker_[speaker_id_]['start']:utterance_per_speaker_[speaker_id_]['end']]
+    for speaker_id_ in w_.keys():
+        i_ = utterance_per_speaker_[speaker_id_]['start']
+        j_ = utterance_per_speaker_[speaker_id_]['end']
+        ivectors_[speaker_id_] = ivectors_all_[:, i_:j_]
 
     utter_lengths_ = {key:(utterance_per_speaker_[key]['end']-utterance_per_speaker_[key]['start']) for key in utterance_per_speaker_.keys()}
-    uniqueLengths_ = np.sort(np.unique(utter_lengths_.values()))
-    
-    speakerIdx_ = 0
+    uniq_lengths_ = np.sort(np.unique([val for val in utter_lengths_.values()]))
+
+    speaker_idx_ = 0
     f_ = np.zeros((D_,K_))
-    ivectorsSorted_ = {}
-    for uniq_len_ in uniqueLengths_:
+    ivectors_sorted_ = {}
+    for uniq_len_ in uniq_lengths_:
         idx_ = []
         for speaker_id_ in utter_lengths_.keys():
-            if uniqueLengths_[speaker_id_]==uniq_len_:
+            if utter_lengths_[speaker_id_]==uniq_len_:
                 idx_.append(speaker_id_)
         temp_ = {}
         count_ = 0
         for speaker_idx_within_unique_length_  in idx_:
             rho_ = ivectors_[speaker_idx_within_unique_length_]
             temp_[count_] = rho_
-            f_[:,speakerIdx_] = np.sum(rho_, axis=1)
-            speakerIdx_ += 1
-        ivectorsSorted_[uniq_len_] = temp_
+            f_[:,speaker_idx_] = np.sum(rho_, axis=1)
+            speaker_idx_ += 1
+        ivectors_sorted_[uniq_len_] = temp_
+    
+    print(f'Length wise sorting speakers: uniq lens={ivectors_sorted_.keys()}')
+    
     
     '''
     GPLDA Training
     '''
-    V_ = np.radom.normal(loc=0.0, scale=1.0, size=(D_,numEigenVoices_))
+    V_ = np.random.normal(loc=0.0, scale=1.0, size=(D_, num_eigen_voices_))
     Lambda_ = np.linalg.pinv(np.divide(S_, N_))     
-    minimumDivergence_ = True
+    min_divergence_ = True
     
-    for i in range(num_iter):
-        print(f'iter:{i}')
+    for iter_i_ in range(num_iter):
+        # print(f'G-PLDA: iter:{iter_i_}')
         # EXPECTATION
-        gamma_ = np.zeros((numEigenVoices_, numEigenVoices_))
-        EyTotal_ = np.zeros((numEigenVoices_, K_))
-        R_ = np.zeros((numEigenVoices_, numEigenVoices_))
+        gamma_ = np.zeros((num_eigen_voices_, num_eigen_voices_))
+        EyTotal_ = np.zeros((num_eigen_voices_, K_))
+        R_ = np.zeros((num_eigen_voices_, num_eigen_voices_))
         
         idx_ = 0
-        for uniq_len_ in uniqueLengths_:
-            ivectorLength_ = uniq_len_
+        for uniq_len_ in uniq_lengths_:
+            ivector_len_ = uniq_len_
             
             # Isolate i-vectors of the same given length
-            iv_ = ivectorsSorted_[uniq_len_]
+            iv_ = ivectors_sorted_[uniq_len_]
             
             # Calculate M
-            M_ = np.linalg.pinv(ivectorLength_*(V_.T @ (Lambda_ @ V_)) + np.eye(numEigenVoices_)) # Equation (A.7) in [13]
+            M_ = np.linalg.pinv(ivector_len_*(V_.T @ (Lambda_ @ V_)) + np.eye(num_eigen_voices_)) # Equation (A.7) in [13]
             
             # Loop over each speaker for the current i-vector length
-            for j in iv_.keys():
+            for ivec_len_ in iv_.keys():
                 # First moment of latent variable for V
                 Ey_ = M_ @ V_.T @ Lambda_ @ f_[:, idx_] # Equation (A.8) in [13]
                 
@@ -224,27 +223,28 @@ def GPLDA_computation(ivector_per_speaker, lda_dim=20, perform_LDA=False, perfor
                 Eyy_ = Ey_ @ Ey_.T
                 
                 # Update Ryy 
-                R_ += ivectorLength_*(M_ + Eyy_) # Equation (A.13) in [13]
+                R_ += ivector_len_*(M_ + Eyy_) # Equation (A.13) in [13]
                 
                 # Append EyTotal
                 EyTotal_[:, idx_] = Ey_
+
                 idx_ += 1
                 
                 # If using minimum divergence, update gamma.
-                if minimumDivergence_:
+                if min_divergence_:
                     gamma_ += (M_ + Eyy_) # Equation (A.18) in [13]
-        
+
         # Calculate T
         TT_ = EyTotal_ @ f_.T # Equation (A.12) in [13]
         
         # MAXIMIZATION
         V_ = TT_.T @ np.linalg.pinv(R_) # Equation (A.16) in [13]
-        Lambda_ = np.linalg.pinv((S_ - V_ @ TT_)/N_) # Equation (A.17) in [13]
+        Lambda_ = np.linalg.pinv(np.divide((S_ - V_ @ TT_), N_)) # Equation (A.17) in [13]
     
         # MINIMUM DIVERGENCE
-        if minimumDivergence_:
-            gamma_ /= K_ # Equation (A.18) in [13]
-            V_ *= np.linalg.cholesky(gamma_) # Equation (A.22) in [13]
+        if min_divergence_:
+            gamma_ = np.divide(gamma_, K_) # Equation (A.18) in [13]
+            V_ = V_ @ np.linalg.cholesky(gamma_ @ gamma_.T) # Equation (A.22) in [13]. Originally cholesky decomposition of gamma_ is performed. But, this operation requires a positive definite matrix and gamma_ is not positive definite always. Hence, (gamma_ @ gamma_.T) is performed  
 
     gpldaModel_ = {
         'mu': mu_,

@@ -508,6 +508,8 @@ class IVector:
 
 
     def extract_ivector(self, X_Enr, tv_fName, opDir):
+        if not os.path.exists(opDir):
+            os.makedirs(opDir)
         
         if not self.BACKGROUND_MODEL:
             ubm_fName_ = self.UBM_DIR + '/ubm.pkl'
@@ -577,16 +579,26 @@ class IVector:
         return
     
     
-    def plda_training(self, X_Enr, ivec_dir):
+    
+    def plda_training(self, X_Enr, model_dir):
         ivector_per_speaker_ = {}
         for speaker_id_ in X_Enr.keys():
-            ivec_fName_ = ivec_dir + '/' + speaker_id_ + '.pkl'
+            ivec_fName_ = model_dir + '/' + speaker_id_ + '.pkl'
             with open(ivec_fName_, 'rb') as f_:
                 I_vectors_ = pickle.load(f_)
                 ivector_per_speaker_[speaker_id_] = I_vectors_.T
                 print(f'speaker={speaker_id_} ivector={np.shape(ivector_per_speaker_[speaker_id_])}')
-
-        gpldaModel_, projectionMatrix_ = GPLDA_computation(ivector_per_speaker_, lda_dim=20, perform_LDA=False, perform_WCCN=False, num_iter=50)
+        
+        gplda_fName_ = model_dir + '/G_PLDA.pkl'
+        if not os.path.exists(gplda_fName_):
+            gpldaModel_, projectionMatrix_ = GPLDA_computation(ivector_per_speaker_, lda_dim=20, perform_LDA=True, perform_WCCN=True, num_iter=50)
+            with open(gplda_fName_, 'wb') as fid_:
+                pickle.dump({
+                    'gplda_model':gpldaModel_, 
+                    'projection_matrix': projectionMatrix_
+                    }, fid_, pickle.HIGHEST_PROTOCOL)
+        else:
+            print('G-PLDA model already trained')
 
 
 

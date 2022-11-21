@@ -70,21 +70,40 @@ def ivector_sv(PARAMS):
     
     
     '''
-    Extracting I-Vectors
+    Extracting Development I-Vectors
+    '''
+    FV_dev_, ram_mem_req_ = LoadFeatures(
+        info=feat_info_[PARAMS['dev_set']], 
+        feature_name=PARAMS['feature_name']
+        ).load(dim=int(PARAMS['num_dim']))
+    dev_ivec_dir_ = PARAMS['model_dir']+'/'+PARAMS['dev_set']+'_ivector/'
+    IVec_.extract_ivector(FV_dev_, tv_mat_fName_, dev_ivec_dir_)
+    '''
+    PLDA Training
+    '''
+    IVec_.plda_training(FV_dev_, dev_ivec_dir_)
+
+
+    '''
+    Extracting Enrollment I-Vectors
     '''
     FV_enr_, ram_mem_req_ = LoadFeatures(
         info=feat_info_[PARAMS['enr_set']], 
         feature_name=PARAMS['feature_name']
         ).load(dim=int(PARAMS['num_dim']))
-    IVec_.extract_ivector(FV_enr_, tv_mat_fName_, PARAMS['model_dir'])
+    enr_ivec_dir_ = PARAMS['model_dir']+'/'+PARAMS['enr_set']+'_ivector/'
+    IVec_.extract_ivector(FV_enr_, tv_mat_fName_, enr_ivec_dir_)
 
 
     '''
-    PLDA Training
+    Extracting Test I-Vectors
     '''
-    IVec_.plda_training(FV_enr_, PARAMS['model_dir'])
-
-
+    FV_test_, ram_mem_req_ = LoadFeatures(
+        info=feat_info_[PARAMS['test_set']], 
+        feature_name=PARAMS['feature_name']
+        ).load(dim=int(PARAMS['num_dim']))
+    test_ivec_dir_ = PARAMS['model_dir']+'/'+PARAMS['test_set']+'_ivector/'
+    IVec_.extract_ivector(FV_test_, tv_mat_fName_, test_ivec_dir_)
 
 
 
