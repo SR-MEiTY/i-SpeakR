@@ -29,13 +29,11 @@ def LDA_computation(ivector_per_speaker, ivectors_combined, ivec_dim, num_eigen_
         Sb_ = np.add(Sb_, np.subtract(wsbar_, wbar_) @ np.subtract(wsbar_, wbar_).T)
         Sw_ = np.add(Sw_, np.cov(ws_, bias=True))
     
-    print(f'Sw={np.shape(Sw_)} Sb={np.shape(Sb_)}')
-    _, A_ = scipy.linalg.eigh(Sw_, Sb_) #, subset_by_index=[ivec_dim-num_eigen_vectors-1, ivec_dim-1])
-    print(f'A_={np.shape(A_)}')
+    eig_vals_, A_ = scipy.linalg.eig(Sb_, Sw_)
+    largest_eig_val_idx_ = np.argsort(eig_vals_)[-num_eigen_vectors-1:-1]
+    A_ = A_[:, largest_eig_val_idx_]
     A_ = np.divide(A_, np.repeat(np.array(np.linalg.norm(A_), ndmin=2), np.shape(A_)[0], axis=0)).T
-    print(f'A_={np.shape(A_)}')
-    
-    sys.exit(0)
+    print(f'A_ = {np.shape(A_)}')
     
     return A_
 
@@ -48,14 +46,17 @@ def WCCN_computation(ivector_per_speaker, ivec_dim):
     # projectionMatrix_ = np.eye(ivec_dim)
     alpha_ = 0.9
     
-    W_ = np.zeros(ivec_dim)
+    W_ = np.zeros((ivec_dim, ivec_dim))
     for speaker_id_ in ivector_per_speaker.keys():
-        W_ += np.cov(ivector_per_speaker[speaker_id_], bias=True)
+        ws_ = ivector_per_speaker[speaker_id_]
+        W_ += np.cov(ws_, bias=True)
     
     W_ /= len(ivector_per_speaker)
     W_ = (1 - alpha_)*W_ + alpha_*np.eye(ivec_dim)
     B_ = np.linalg.cholesky(np.linalg.pinv(W_))
-    
+
+    print(f'B_={np.shape(B_)}')
+
     return B_
 
 
@@ -97,7 +98,7 @@ def GPLDA_computation(ivector_per_speaker, lda_dim=20, perform_LDA=False, perfor
         for speaker_id_ in ivector_per_speaker.keys():
             w_[speaker_id_] = ivectors_train_[:, utterance_per_speaker_[speaker_id_]['start']:utterance_per_speaker_[speaker_id_]['end']]
         projectionMatrix_ = A_ @ projectionMatrix_
-        print(f"LDA projection matrix calculated {np.round(time.process_time()-startTime,2)} seconds).")
+        print(f"LDA projection matrix calculated {np.round(time.process_time()-startTime,2)} seconds). projectionMatrix_={np.shape(projectionMatrix_)}")
     
     
     '''
@@ -107,13 +108,23 @@ def GPLDA_computation(ivector_per_speaker, lda_dim=20, perform_LDA=False, perfor
     if perform_WCCN:
         startTime = time.process_time()
         B_ = WCCN_computation(ivector_per_speaker, ivec_dim_)
-        projectionMatrix_ = B_ @ projectionMatrix_
-        print(f"WCCN projection matrix calculated {np.round(time.process_time()-startTime,2)} seconds).")
-        
+        print(f'B_={np.shape(B_)}')
+        print(f'projectionMatrix_={np.shape(projectionMatrix_)}')
+        projectionMatrix_ = (B_ @ projectionMatrix_.T).T
+        print(f"WCCN projection matrix calculated {np.round(time.process_time()-startTime,2)} seconds). projectionMatrix_={np.shape(projectionMatrix_)}")
+    
+    
     ivectors_ = {}
     for speaker_id_ in ivector_per_speaker.keys():
         ivectors_[speaker_id_] = projectionMatrix_@ivector_per_speaker[speaker_id_]
+        print(f'speaker wise ivectors {speaker_id_} {np.shape(ivectors_[speaker_id_])}')
     numEigenVoices_ = len(ivectors_) # check what is eigen voice may be 2
+    
+    '''
+    Working till here
+    '''
+    sys.exit(0)
+
     K_ = len(ivectors_)
     D_ = ivec_dim_
     ivectorsMatrix_ = np.empty([], dtype=np.float32)

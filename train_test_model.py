@@ -252,8 +252,8 @@ if __name__ == '__main__':
         feat_info_ = MFCC(config=PARAMS).get_feature_details()
         print('Feature details obtained')
     
-    if PARAMS['model_type']=='gmm_ubm':    
+    if PARAMS['model_type']=='gmm_ubm':
         gmm_ubm_sv(PARAMS)
         
-    if PARAMS['model_type']=='i_vector':    
+    if PARAMS['model_type']=='i_vector':
         ivector_sv(PARAMS)        

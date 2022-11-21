@@ -586,7 +586,7 @@ class IVector:
                 ivector_per_speaker_[speaker_id_] = I_vectors_.T
                 print(f'speaker={speaker_id_} ivector={np.shape(ivector_per_speaker_[speaker_id_])}')
 
-        gpldaModel_, projectionMatrix_ = GPLDA_computation(ivector_per_speaker_, lda_dim=20, perform_LDA=True, perform_WCCN=True, num_iter=50)
+        gpldaModel_, projectionMatrix_ = GPLDA_computation(ivector_per_speaker_, lda_dim=20, perform_LDA=False, perform_WCCN=False, num_iter=50)
 
 
 
