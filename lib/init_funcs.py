@@ -155,15 +155,18 @@ def get_configurations():
         'UBM_NCOMPONENTS': int(section['UBM_ncomp']),               # Number of Gaussian components for the UBM model
         'COVARIANCE_TYPE': section['covariance_type'],              # Type of covariance: 'full', 'diag', 'tied'
         'ADAPT_WEIGHT_COV': section.getboolean('adapt_weight_cov'), # Flag to indicate whether to adapt the weights and covariances of the speaker models
+
         'data_info': section['data_info'],                          # Data type is either "infer" or "specify"
-        'data_path': section['data_path'],                          # Path to data set
+        # 'data_path': section['data_path'],                          # Path to data set
+
         'output_path': section['output_path'],                      # Path where program output is to be stored
         'dataset_name': section['dataset_name'],                    # Name of the dataset
         'ubm_memory_limit': int(section['ubm_memory_limit']),       # Memory limit to perform batch-wise UBM training
 
-        'nbThread': int(section['nbThread']),                       # Number of parallel threads
-        'distrib_nb': int(section['UBM_ncomp']),                    # Number of UBM components
-        'rank_TV': int(section['rank_TV']),                         # T-Matrix rank
+        # 'nbThread': int(section['nbThread']),                       # Number of parallel threads
+        # 'distrib_nb': int(section['UBM_ncomp']),                    # Number of UBM components
+
+        'rank_tv': int(section['rank_tv']),                         # T-Matrix rank
         'tv_iteration': int(section['tv_iteration']),               # Number of iterations for T-Matrix estimation
         'batch_size': int(section['batch_size']),                   # Batch size
         }
@@ -196,6 +199,8 @@ def get_configurations():
     
     return CFG
     
+
+
 
 def parse_commandline_arguments():
     '''

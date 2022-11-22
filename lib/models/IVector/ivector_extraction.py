@@ -4,7 +4,7 @@
 Created on Thu Aug  4 18:31:50 2022
 
 @author: Mrinmoy Bhattacharjee, Senior Project Engineer, Dept. of EE, IIT Dharwad
-@code source: Dr. Gayadhar Pradhan, Assoc. Prof., NIT Patna (Matlab version)
+@matlab_code_source: https://in.mathworks.com/help/audio/ug/speaker-verification-using-ivectors.html#mw_rtc_SpeakerVerificationUsingIVectorsExample_D8A31795
 """
 
 from sklearn.mixture import GaussianMixture
@@ -12,12 +12,15 @@ import numpy as np
 from lib.models.GMM_UBM.speaker_adaptation import SpeakerAdaptation
 import pickle
 import os
-from sklearn.preprocessing import StandardScaler
-from lib.metrics.performance_metrics import PerformanceMetrics
+# from sklearn.preprocessing import StandardScaler
+# from lib.metrics.performance_metrics import PerformanceMetrics
 import psutil
-import sys
+# import sys
 import time
-from lib.models.IVector.gplda import GPLDA_computation
+from lib.models.IVector.gplda import GPLDA_computation, compute_gplda_score
+import csv
+from lib.metrics.performance_metrics import PerformanceMetrics
+
 
 
 class IVector:
@@ -30,18 +33,21 @@ class IVector:
     N_BATCHES = 0
     
     
-    def __init__(self, ubm_dir, model_dir, opDir, num_mixtures=128, feat_scaling=0, num_iter=10, mem_limit=5000):
+    def __init__(self, ubm_dir, model_dir, opDir, num_mixtures=128, ivec_dim=100, feat_scaling=0, tv_iteration=10, mem_limit=5000, lda=True, wccn=True):
         self.UBM_DIR = ubm_dir
         self.MEM_LIMIT = mem_limit
         self.MODEL_DIR = model_dir
         self.OPDIR = opDir
         self.NCOMP = num_mixtures
+        self.IVEC_DIM = ivec_dim
         self.FEATURE_SCALING = feat_scaling
         self.N_BATCHES = 1
-        self.N_ITER = num_iter
+        self.TV_ITERATION = tv_iteration
+        self.LDA = lda
+        self.WCCN = wccn
     
     
-    def train_ubm(self, X, ram_mem_req, cov_type='diag', max_iterations=100, num_init=1, verbosity=1):
+    def train_ubm(self, X, ram_mem_req, cov_type='diag', ubm_dir='', max_iterations=100, num_init=1, verbosity=1):
         '''
         Training the GMM Universal Background Model.
 
@@ -141,7 +147,7 @@ class IVector:
                     reg_covar_ = np.max([reg_covar_*10, 1e-1])
                     print(f'Singleton component error. Reducing reg_covar to {np.round(reg_covar_,6)}')
         
-        ubm_fName = self.MODEL_DIR + '/ubm.pkl'
+        ubm_fName = ubm_dir + '/ubm.pkl'
         with open(ubm_fName, 'wb') as f_:
             pickle.dump({'model':self.BACKGROUND_MODEL, 'scaler':self.SCALER}, f_, pickle.HIGHEST_PROTOCOL)
         
@@ -208,7 +214,7 @@ class IVector:
             
             # first order stats is just a (posterior) weighted sum
             Fc_ = np.matmul(X_utterance_[split_id_].T, gammas_) # n_dim, n_components
-            Fc_ -= np.multiply(np.repeat(np.array(Nc_, ndmin=2), self.BACKGROUND_MODEL.means_.shape[1], axis=0), self.BACKGROUND_MODEL.means_).T
+            Fc_ -= np.multiply(np.repeat(np.array(Nc_, ndmin=2), self.BACKGROUND_MODEL.means_.shape[1], axis=0), self.BACKGROUND_MODEL.means_.T)
             Fc_ = np.array(Fc_.flatten(), ndmin=2).T # n_dim*n_component, 1
             F_[split_id_] = Fc_
             split_count_ += 1
@@ -231,144 +237,22 @@ class IVector:
 
 
 
-    def estimate_y_and_v(self, F, N, S, m, E, d, v, u, z, y, x, spk_ids, accumulator=False):
+    def train_tv_matrix(self, X, tv_fName):
         '''
-        % ESTIMATE_Y_AND_V estimates speaker factors and eigenvoices for
-        % joint factor analysis model 
-        %
-        %
-        % [y v]=estimate_y_and_v(F, N, S, m, E, d, v, u, z, y, x, spk_ids)
-        %
-        % provides new estimates of channel factors, x, and 'eigenchannels', u,
-        % given zeroth and first order sufficient statistics (N. F), current
-        % hyper-parameters of joint factor analysis  model (m, E, d, u, v) and
-        % current estimates of speaker and channel factors (x, y, z)
-        %
-        % F - matrix of first order statistics (not centered). The rows correspond
-        %     to training segments. Number of columns is given by the supervector
-        %     dimensionality. The first n collums correspond to the n dimensions
-        %     of the first Gaussian component, the second n collums to second 
-        %     component, and so on.
-        % N - matrix of zero order statistics (occupation counts of Gaussian
-        %     components). The rows correspond to training segments. The collums
-        %     correspond to Gaussian components.
-        % S - NOT USED by this function; reserved for second order statistics
-        % m - speaker and channel independent mean supervector (e.g. concatenated
-        %     UBM mean vectors)
-        % E - speaker and channel independent variance supervector (e.g. concatenated
-        %     UBM variance vectors)
-        % d - Row vector that is the diagonal from the diagonal matrix describing the
-        %     remaining speaker variability (not described by eigenvoices). Number of
-        %     columns is given by the supervector dimensionality.
-        % v - The rows of matrix v are 'eigenvoices'. (The number of rows must be the
-        %     same as the number of columns of matrix y). Number of columns is given
-        %     by the supervector dimensionality.
-        % u - The rows of matrix u are 'eigenchannels'. (The number of rows must be
-        %     the same as the number of columns of matrix x) Number of columns is
-        %     given by the supervector dimensionality.
-        % y - NOT USED by this function; used by other JFA function as
-        %     matrix of speaker factors corresponding to eigenvoices. The rows
-        %     correspond to speakers (values in vector spk_ids are the indices of the
-        %     rows, therfore the number of the rows must be (at least) the highest
-        %     value in spk_ids). The columns correspond to eigenvoices (The number
-        %     of columns must the same as the number of rows of matrix v).
-        % z - matrix of speaker factors corresponding to matrix d. The rows
-        %     correspond to speakers (values in vector spk_ids are the indices of the
-        %     rows, therfore the number of the rows must be (at least) the highest
-        %     value in spk_ids). Number of columns is given by the supervector 
-        %     dimensionality.
-        % x - matrix of channel factors. The rows correspond to training
-        %     segments. The columns correspond to eigenchannels (The number of columns 
-        %     must be the same as the number of rows of matrix u)
-        % spk_ids - column vector with rows corresponding to training segments and
-        %     integer values identifying a speaker. Rows having same values identifies
-        %     segments spoken by same speakers. The values are indices of rows in
-        %     y and z matrices containing corresponding speaker factors.
-        %
-        %
-        % y=estimate_y_and_v(F, N, S, m, E, d, v, u, z, y, x, spk_ids)
-        %
-        % only the speaker factors are estimated
-        %
-        %
-        % [y A C]=estimate_y_and_v(F, N, S, m, E, d, v, u, z, y, x, spk_ids)
-        %
-        % estimates speaker factors and acumulators A and C. A is cell array of MxM
-        % matrices, where M is number of eigenvoices. Number of elements in the
-        % cell array is given by number of Gaussian components. C is of the same size
-        % at the matrix v.
-        %
-        %
-        % v=estimate_y_and_v(A, C)
-        %
-        % updates eigenvoices from accumulators A and C. Using F and N statistics
-        % corresponding to subsets of training segments, multiple sets of accumulators
-        % can be collected (possibly in parallel) and summed before the update. Note
-        % that segments of one speaker must not be split into different subsets.
+        Training the Total Variability matrix
+
+        Parameters
+        ----------
+        X : dict
+            Dictionary containing the speaker-wise data.
+        tv_fName : str
+            Filename to store the trained TV matrix.
+
+        Returns
+        -------
+        None.
 
         '''
-        
-        if accumulator:
-            # update v from acumulators A and C
-            y = self.update_v(F, N)
-        else:            
-            # this will just create a index map, so that we can copy the counts n-times (n=dimensionality)
-            dim = int(np.ceil(np.shape(F)[1]/np.shape(N)[1]))
-            index_map = np.reshape(np.repeat(np.array(list(range(np.shape(N)[1])), ndmin=2), dim, axis=0), (np.shape(F)[1], 1))
-            y = np.zeros((len(spk_ids), np.shape(v)[0]))
-            
-            # if nargout > 1
-            A = {}
-            for c in range(np.shape(N)[1]):
-                A[c] = np.zeros(np.shape(v)[1])
-            C = np.zeros(np.shape(v)[0], np.shape(F)[1])
-            # end
-            
-            vEvT = {}
-            for c in range(np.shape(N)[1]):
-                c_elements = list(range(c*dim, (c+1)*dim))
-                vEvT[c] = np.multiply(v[:,c_elements], np.repeat(np.array(np.power(E[c_elements]*1.0,-1), ndmin=2), np.shape(v)[0], axis=0)) @ v[:,c_elements]
-
-            for ii in np.unique(spk_ids):
-                speakers_sessions = np.squeeze(np.where(spk_ids == ii))
-                Fs = np.sum(F[speakers_sessions,:], axis=0)
-                Nss = np.sum(N[speakers_sessions,:], axis=0)
-                Ns = Nss[0, index_map]
-                Fs = Fs -  np.multiply((m + np.multiply(z[ii,:], d)), Ns)
-                for jj in speakers_sessions:
-                    Fs = Fs - np.multiply((x[jj,:] @ u), N[jj, index_map])
-            
-                # L = eye(size(v,1)) + v * diag(Ns./E) * v'
-                L = np.eye(np.shape(v)[0])
-                for c in range(np.shape(N)[1]):
-                    L = L + np.multiply(vEvT[c], Nss[c])
-                    
-                invL = np.linalg.pinv(L)
-                y[ii, :] = ((np.divide(Fs, E)) @ v) @ invL
-                # if nargout > 1
-                invL = invL + (y[ii,:] @ y[ii,:])
-                for c in range (np.shape(N)[1]):
-                    A[c] += invL @ Nss[c]
-                C += y[ii,:] @ Fs
-            
-            # output new estimates of y and v
-            v = self.update_v(A, C)
-        
-        return y, v
-    
-
-
-    def update_v(self, A, C):
-        dim = int(np.shape(C)[1]/len(A))
-        for c in range(len(A)):
-            c_elements = list(range(c*dim, ((c+1)*dim)))
-            C[:,c_elements] = np.linalg.pinv(A[c]) @ C[:,c_elements]
-        
-        return C
-
-       
-
-    def train_t_matrix(self, X, tv_fName, ivec_dim=100):
         
         if not self.BACKGROUND_MODEL:
             ubm_fName_ = self.UBM_DIR + '/ubm.pkl'
@@ -395,7 +279,7 @@ class IVector:
             Sigma_ = self.BACKGROUND_MODEL.covariances_
         Sigma_ = Sigma_.flatten() # UBM Variance super-vector
         
-        spk_ids_ = X.keys()
+        # spk_ids_ = X.keys()
         
         suf_stats_fName_ = self.MODEL_DIR+'/Sufficient_Stats.pkl'
         if not os.path.exists(suf_stats_fName_):
@@ -413,34 +297,34 @@ class IVector:
         
         print('Initializing T matrix (randomly)')
         # print(f'F_={np.shape(F_)} Sigma_={np.shape(Sigma_)}')
-        T_mat_ = np.random.normal(loc=0.0, scale=0.0001, size=(np.shape(Sigma_)[0], ivec_dim))
+        T_mat_ = np.random.normal(loc=0.0, scale=0.0001, size=(np.shape(Sigma_)[0], self.IVEC_DIM))
         T_mat_ /= np.linalg.norm(T_mat_) # (19968 x 100)
         # print(f'T_mat_ = {T_mat_.shape}')
         
         # we don't use the second order stats - set 'em to empty matrix
-        S_ = []
+        # S_ = []
 
-        n_speakers_ = len(spk_ids_)
+        # n_speakers_ = len(spk_ids_)
         # n_sessions_ = np.shape(spk_ids_)[0]
         n_feat_ = Mu_.shape[1]
         n_comp_ = Mu_.shape[0]
         
-        I_ = np.eye(ivec_dim)
+        I_ = np.eye(self.IVEC_DIM)
         # print(f'I_={I_.shape}')
         Ey_ = {} # numSpeakers_
         Eyy_ = {} # numSpeakers_
         Linv_ = {} # numSpeakers_
                 
-        for iter_i_ in range(self.N_ITER):
+        for iter_i_ in range(self.TV_ITERATION):
             startTime = time.process_time()
 
             # 1. Calculate the posterior distribution of the hidden variable
-            TtimesInverseSSdiag_ = np.divide(T_mat_, np.repeat(np.array(Sigma_, ndmin=2).T, ivec_dim, axis=1)+1e-10).T # (19968 x 100)
+            TtimesInverseSSdiag_ = np.divide(T_mat_, np.repeat(np.array(Sigma_, ndmin=2).T, self.IVEC_DIM, axis=1)+1e-10).T # (19968 x 100)
             # print(f'TtimesInverseSSdiag_={np.shape(TtimesInverseSSdiag_)}')
             
             for s_ in N_.keys():
                 # print(f'N_[s_]={N_[s_].shape}')
-                Nc_ = np.repeat(np.array(np.tile(N_[s_], [n_feat_]), ndmin=2), ivec_dim, axis=0)
+                Nc_ = np.repeat(np.array(np.tile(N_[s_], [n_feat_]), ndmin=2), self.IVEC_DIM, axis=0)
                 # print(f'I_={I_.shape} TtimesInverseSSdiag_={TtimesInverseSSdiag_.shape}, Nc_={Nc_.shape} T_mat_={T_mat_.shape}')
                 L_ = I_ + (np.multiply(TtimesInverseSSdiag_, Nc_) @ T_mat_)
                 # print(f'L_={L_.shape}')
@@ -464,15 +348,15 @@ class IVector:
             # print(f'Kt_={np.shape(Kt_)}')
             
             K_ = {}
-            for dim_i_ in range(ivec_dim):
+            for dim_i_ in range(self.IVEC_DIM):
                 K_[dim_i_] = np.reshape(Kt_[:, dim_i_], newshape=(n_feat_, n_comp_)) # (39, 512)
                 # print(f'{s_} {K[s_].shape}')
 
             newT_ = {}
             for c_ in range(n_comp_):
-                AcLocal_ = np.zeros((ivec_dim, ivec_dim)) # (100, 100)
+                AcLocal_ = np.zeros((self.IVEC_DIM, self.IVEC_DIM)) # (100, 100)
                 for s_ in Eyy_.keys():
-                    Nc_ = np.repeat(np.array(N_[s_], ndmin=2), ivec_dim, axis=0)
+                    Nc_ = np.repeat(np.array(N_[s_], ndmin=2), self.IVEC_DIM, axis=0)
                     # print(f'N_[s_] {N_[s_].shape} Nc_={Nc_.shape}')
                     # print(f'Eyy_[s_] {Eyy_[s_].shape}')
                     AcLocal_ += Nc_[:, c_] @ Eyy_[s_]
@@ -480,7 +364,7 @@ class IVector:
 
                 # 3. Update the Total Variability Space
                 Kc_ = np.empty([])
-                for dim_i_ in range(ivec_dim):
+                for dim_i_ in range(self.IVEC_DIM):
                     K_temp_ = np.array(K_[dim_i_][:,c_], ndmin=2)
                     if np.size(Kc_)<=1:
                         Kc_ = K_temp_
@@ -490,7 +374,7 @@ class IVector:
                 newT_[c_] = (np.linalg.pinv(AcLocal_) @ Kc_).T # (39, 100)
                 # print(f'newT_[c_]: {newT_[c_].shape}')
             
-            for dim_i_ in range(ivec_dim):
+            for dim_i_ in range(self.IVEC_DIM):
                 T_col_ = []
                 for c_ in range(n_comp_):
                     T_col_.extend(newT_[c_][:, dim_i_].flatten())
@@ -498,19 +382,16 @@ class IVector:
                 T_mat_[:, dim_i_] = np.array(T_col_)
             # print(f'T_mat_: {np.shape(T_mat_)}')
 
-            print(f"Training Total Variability Space: {iter_i_} / {self.N_ITER} complete ({np.round(time.process_time()-startTime,2)} seconds).")
+            print(f"Training Total Variability Space: {iter_i_} / {self.TV_ITERATION} complete ({np.round(time.process_time()-startTime,2)} seconds).")
 
         with open(tv_fName, 'wb') as f_:
             pickle.dump({'tv_mat':T_mat_}, f_, pickle.HIGHEST_PROTOCOL)
 
         return
-                
 
 
-    def extract_ivector(self, X_Enr, tv_fName, opDir):
-        if not os.path.exists(opDir):
-            os.makedirs(opDir)
-        
+
+    def compute_ivector(self, X, TV):
         if not self.BACKGROUND_MODEL:
             ubm_fName_ = self.UBM_DIR + '/ubm.pkl'
             if not os.path.exists(ubm_fName_):
@@ -524,11 +405,7 @@ class IVector:
             except:
                 with open(ubm_fName_, 'rb') as f_:
                     self.BACKGROUND_MODEL = pickle.load(f_)
-        print('Background model loaded')
-        
-        with open(tv_fName, 'rb') as f_:
-            TV_ = pickle.load(f_)
-            TV_ = TV_['tv_mat']
+        # print('Background model loaded')
 
         Mu_ = self.BACKGROUND_MODEL.means_ # UBM Mean super-vector (n_comp_, n_feat_)
         Sigma_ = np.empty([], dtype=np.float32)
@@ -539,40 +416,73 @@ class IVector:
         else:
             Sigma_ = self.BACKGROUND_MODEL.covariances_
         Sigma_ = Sigma_.flatten() # UBM Variance super-vector
-        ivec_dim_ = TV_.shape[1] # (100,)
 
-        for speaker_id_ in X_Enr.keys():
-            ivec_fName_ = opDir + '/' + speaker_id_ + '.pkl'
+        lld_ = self.BACKGROUND_MODEL.predict_proba(X) # (1280, 512)
+        # Compute a posteriori normalized probability
+        amax = np.max(lld_, axis=0) # (512,)
+        amax_arr = np.repeat(np.array(amax, ndmin=2), np.shape(lld_)[0], axis=0) # (1280, 512)
+        lld_sum_ = amax + np.log(np.sum(np.exp(np.subtract(lld_,amax_arr)), axis=0)) # (512,)
+        gamma_ = np.exp(np.subtract(lld_, np.repeat(np.array(lld_sum_, ndmin=2), lld_.shape[0], axis=0))) # (512, 1280)
+                
+        # Compute Baum-Welch statistics
+        n_ = np.sum(gamma_, axis=0) # (1280,)                
+        f_ = X.T @ gamma_ - np.multiply(np.repeat(np.array(n_, ndmin=2), Mu_.shape[1], axis=0), Mu_.T) # ((39, 512))
+        
+        TS_ = np.divide(TV, np.repeat(np.array(Sigma_, ndmin=2).T, TV.shape[1], axis=1)) # (19968, 100)
+        TSi_ = TS_.T # (19968, 100)
+        I_ = np.eye(self.IVEC_DIM) # (100, 100)
+        n_feat_ = Mu_.shape[1] # 39
+        TS_temp_ = np.multiply(TS_, np.repeat(np.array(np.tile(n_, [n_feat_]), ndmin=2).T, self.IVEC_DIM, axis=1)) # (19968, 100)
+        w_ = np.linalg.pinv(I_ + TS_temp_.T @ TV) @ TSi_ @ f_.flatten()
+        # print(f'w_={np.shape(w_)}')
+        
+        return w_
+        
+
+
+    def extract_ivector(self, X, tv_fName, opDir):
+        '''
+        Extracting the ivectors for the given data
+
+        Parameters
+        ----------
+        X : dict
+            Dictionary object containing speaker-wise data.
+        tv_fName : str
+            Filename of the trained TV matrix.
+        opDir : TYPE
+            Directory to store the extracted i-vectors.
+
+        Returns
+        -------
+        None.
+
+        '''
+        if not os.path.exists(opDir):
+            os.makedirs(opDir)
+                
+        with open(tv_fName, 'rb') as f_:
+            TV_ = pickle.load(f_)
+            TV_ = TV_['tv_mat']
+
+        for speaker_id_ in X.keys():
+            ivec_speaker_path_ = opDir + '/' + speaker_id_ + '/' 
+            if not os.path.exists(ivec_speaker_path_):
+                os.makedirs(ivec_speaker_path_)
+            ivec_fName_ = ivec_speaker_path_ + '/' + speaker_id_ + '.pkl'
             if os.path.exists(ivec_fName_):
                 print(f'I-vector already computed for {speaker_id_}')
                 continue
             
-            I_vectors_ = np.zeros((len(X_Enr[speaker_id_]), ivec_dim_))
+            I_vectors_ = np.zeros((len(X[speaker_id_]), self.IVEC_DIM))
             utter_count_ = 0
-            for split_id_ in X_Enr[speaker_id_].keys():
-                X_ = X_Enr[speaker_id_][split_id_] # (1280, 39)
-                lld_ = self.BACKGROUND_MODEL.predict_proba(X_) # (1280, 512)
-                # Compute a posteriori normalized probability
-                amax = np.max(lld_, axis=0) # (512,)
-                amax_arr = np.repeat(np.array(amax, ndmin=2), np.shape(lld_)[0], axis=0) # (1280, 512)
-                lld_sum_ = amax + np.log(np.sum(np.exp(np.subtract(lld_,amax_arr)), axis=0)) # (512,)
-                gamma_ = np.exp(np.subtract(lld_, np.repeat(np.array(lld_sum_, ndmin=2), lld_.shape[0], axis=0))) # (512, 1280)
-                        
-                # Compute Baum-Welch statistics
-                n_ = np.sum(gamma_, axis=0) # (1280,)                
-                f_ = X_.T @ gamma_ - np.multiply(np.repeat(np.array(n_, ndmin=2), Mu_.shape[1], axis=0), Mu_.T) # ((39, 512))
-                
-                TS_ = np.divide(TV_, np.repeat(np.array(Sigma_, ndmin=2).T, TV_.shape[1], axis=1)) # (19968, 100)
-                TSi_ = TS_.T # (19968, 100)
-                I_ = np.eye(ivec_dim_) # (100, 100)
-                n_feat_ = Mu_.shape[1] # 39
-                TS_temp_ = np.multiply(TS_, np.repeat(np.array(np.tile(n_, [n_feat_]), ndmin=2).T, ivec_dim_, axis=1)) # (19968, 100)
-                w_ = np.linalg.pinv(I_ + TS_temp_.T @ TV_) @ TSi_ @ f_.flatten()
-                # print(f'w_={np.shape(w_)} speaker_count_={speaker_count_}')
-                
+            for split_id_ in X[speaker_id_].keys():
+                X_ = X[speaker_id_][split_id_] # (1280, 39)
+                w_ = self.compute_ivector(X_, TV_)                
                 I_vectors_[utter_count_,:] = w_
                 utter_count_ += 1
             
+            # print(f'ivec_fName_={ivec_fName_}')
             with open(ivec_fName_, 'wb') as f_:
                 pickle.dump(I_vectors_, f_, pickle.HIGHEST_PROTOCOL)
         
@@ -580,40 +490,287 @@ class IVector:
     
     
     
-    def plda_training(self, X_Enr, model_dir):
+    def plda_training(self, X, model_dir):
+        '''
+        Training PLDA model.
+
+        Parameters
+        ----------
+        X : dict
+            Dictionary containing speaker-wise data.
+        model_dir : str
+            Directory to store the PLDA model.
+
+        Returns
+        -------
+        None.
+
+        '''
         ivector_per_speaker_ = {}
-        for speaker_id_ in X_Enr.keys():
-            ivec_fName_ = model_dir + '/' + speaker_id_ + '.pkl'
+        for speaker_id_ in X.keys():
+            ivec_fName_ = model_dir + '/' + speaker_id_ + '/' + speaker_id_ + '.pkl'
             with open(ivec_fName_, 'rb') as f_:
                 I_vectors_ = pickle.load(f_)
                 ivector_per_speaker_[speaker_id_] = I_vectors_.T
                 print(f'speaker={speaker_id_} ivector={np.shape(ivector_per_speaker_[speaker_id_])}')
         
-        gplda_fName_ = model_dir + '/G_PLDA.pkl'
-        if not os.path.exists(gplda_fName_):
-            gpldaModel_, projectionMatrix_ = GPLDA_computation(ivector_per_speaker_, lda_dim=20, perform_LDA=True, perform_WCCN=True, num_iter=50)
-            with open(gplda_fName_, 'wb') as fid_:
-                pickle.dump({
-                    'gplda_model':gpldaModel_, 
-                    'projection_matrix': projectionMatrix_
-                    }, fid_, pickle.HIGHEST_PROTOCOL)
-        else:
-            print('G-PLDA model already trained')
-
-
-
-
-
-    def write_list_to_txt(self, txt_file, tmp_list):
-        txt_data = ",".join(tmp_list)
-        with open(txt_file, "w") as f:
-            f.write(txt_data)
-
-
+        gpldaModel_, projectionMatrix_ = GPLDA_computation(ivector_per_speaker_, lda_dim=20, perform_LDA=self.LDA, perform_WCCN=self.WCCN, num_iter=50)
         
+        return gpldaModel_, projectionMatrix_
 
+
+
+    def perform_testing(self, enr_ivec_dir, tv_fName, classifier=None, opDir='', feat_info=None,  dim=None, test_key=None, duration=None):
+        '''
+        Test i-vector based speaker recognition system
+
+        Parameters
+        ----------
+        enr_ivec_dir : str
+            Enrollment i-vector directory.
+        tv_fName : str
+            Trained Total Variability matrix file.
+        classifier : dict, optional
+            G-PLDA model and projection matrix. The default is None.
+        opDir : str, optional
+            Path to dump output files. The default is ''.
+        feat_info : dict, optional
+            Dictionary containing speaker-wise feature info. The default is None.
+        dim : int, optional
+            Dimensions of input features. The default is None.
+        test_key : str, optional
+            Path to test key csv file. The default is None.
+        duration : float, optional
+            Test utterance chop duation. The default is None.
+
+        Returns
+        -------
+        scores_ : dict
+            Scores computed for all test utterances.
+
+        '''
+        if duration:
+            score_fName_ = opDir + '/Test_Scores_' + str(duration) + 's.pkl'
+        else:
+            score_fName_ = opDir + '/Test_Scores.pkl'
     
-    
-    # def train_tv_matrix(self, PARAMS, ubm, stat_path):
-    #     enroll_stat = sidekit_util.adapt_stats_with_feat_dir(PARAMS['feat_dir'], ubm, int(PARAMS['nbThread']))
-    #     enroll_stat.write(stat_path)
+        score_fName_ = opDir + '/Test_Scores.pkl'
+        print(f'scores={os.path.exists(score_fName_)}')
+        if not os.path.exists(score_fName_):    
+            scores_ = {}
+            true_lab_ = []
+            pred_lab_ = []
+            
+            '''
+            Loading Total Variability matrix
+            '''
+            with open(tv_fName, 'rb') as f_:
+                TV_ = pickle.load(f_)
+                TV_ = TV_['tv_mat']
+            
+            ''' Loading the speaker models '''
+            enrolled_speakers_ = next(os.walk(enr_ivec_dir))[1]
+            enr_ivectors_ = {}
+            for speaker_id_ in enrolled_speakers_:
+                ivec_fName_ = enr_ivec_dir + '/' + speaker_id_ + '/' + speaker_id_ + '.pkl'
+                with open(ivec_fName_, 'rb') as f_:
+                    I_vectors_ = pickle.load(f_)
+                    enr_ivectors_[speaker_id_] = I_vectors_.T
+                                
+            confusion_matrix_ = np.zeros((len(enrolled_speakers_), len(enrolled_speakers_)))
+            match_count_ = np.zeros(len(enrolled_speakers_))
+            
+            '''
+            Testing every test utterance one by one 
+            '''
+            total_splits_ = 0
+            
+            speaker_id_list_ = []
+            for split_id_ in feat_info.keys():
+                if not split_id_.split('_')[-2]=='x':
+                    split_dur_ = int(split_id_.split('_')[-2])
+                else:
+                    split_dur_ = duration
+                if duration:
+                    if not split_dur_==duration:
+                        continue
+                speaker_id_list_.append(feat_info[split_id_]['speaker_id'])
+                total_splits_ += 1
+                
+            output_fName_ = opDir + '/' + test_key.split('/')[-1].split('.')[0] + '_predictions.csv'
+            with open(output_fName_, 'a+', encoding='utf8') as fid_:
+                writer_ = csv.writer(fid_)
+                writer_.writerow([
+                    'utterance_id',
+                    'speaker_id', 
+                    'score', 
+                    ])
+                
+            split_count_ = 0
+            with open(test_key, 'r' ) as test_meta_info_:
+                reader_ = csv.DictReader(test_meta_info_)
+                for row_ in reader_:
+                    split_id_ = row_['split_id']
+                    # print(row_['cohorts'])
+                    cohort_speakers_ = row_['cohorts'].split('|')
+                    # print(f'cohort_speakers_={cohort_speakers_}')
+                            
+                    split_count_ += 1    
+                    speaker_id_ = feat_info[split_id_]['speaker_id']
+                    test_ivec_opDir_ = opDir + '/ivectors/' + speaker_id_ + '/'
+                    if not os.path.exists(test_ivec_opDir_):
+                        os.makedirs(test_ivec_opDir_)
+                        
+                    test_ivec_fName_ = test_ivec_opDir_ + '/' + split_id_ + '.pkl'
+                    test_ivec_ = np.empty([])
+                    if not os.path.exists(test_ivec_fName_):
+                        feature_path_ = feat_info[split_id_]['file_path']
+                        fv_ = None
+                        del fv_
+                        fv_ = np.load(feature_path_, allow_pickle=True)
+                        # The feature vectors must be stored as individual rows in the 2D array
+                        if dim:
+                            if np.shape(fv_)[0]==dim:
+                                fv_ = fv_.T
+                        elif np.shape(fv_)[1]>np.shape(fv_)[0]:
+                            fv_ = fv_.T
+        
+                        ''' Feature Scaling '''
+                        if self.FEATURE_SCALING>0:
+                            fv_ = self.SCALER.transform(fv_)
+                            fv_ = fv_.astype(np.float32)
+                        
+                        test_ivec_ = self.compute_ivector(fv_, TV_)
+                        with open(test_ivec_fName_, 'wb') as ivec_fid_:
+                            pickle.dump(test_ivec_, ivec_fid_, pickle.HIGHEST_PROTOCOL)
+                        # print(f'Test {split_id_} ivector saved')
+                    else:
+                        with open(test_ivec_fName_, 'rb') as ivec_fid_:
+                            test_ivec_ = pickle.load(ivec_fid_)
+                        # print(f'Test {split_id_} ivector loaded')
+
+                    if (self.LDA) or (self.WCCN):
+                        test_ivec_ = classifier['projection_matrix'] @ test_ivec_
+
+                    gplda_scores_ = {}
+                    for index_i_ in enr_ivectors_.keys():
+                        if index_i_ in cohort_speakers_:
+                            spk_scores_ = []
+                            for utter_i_ in range(enr_ivectors_[index_i_].shape[1]):
+                                enr_ivec_ = enr_ivectors_[index_i_][:,utter_i_]
+                                if (self.LDA) or (self.WCCN):
+                                    enr_ivec_ = classifier['projection_matrix'] @ enr_ivec_
+                                spk_scores_.append(compute_gplda_score(classifier['gplda_model'], enr_ivec_, test_ivec_))
+                            gplda_scores_[index_i_] = np.min(spk_scores_)
+                    # print(gplda_scores_)
+                    
+                    scores_[split_id_] = {
+                        'speaker_id':speaker_id_, 
+                        'gplda_scores': gplda_scores_, 
+                        'enrolled_speakers': enrolled_speakers_,
+                        }
+
+                    for cohort_id_ in gplda_scores_.keys():
+                        output_fName_ = opDir+'/'+test_key.split('/')[-1].split('.')[0]+'_predictions.csv'
+                        with open(output_fName_, 'a+', encoding='utf8') as fid_:
+                            writer_ = csv.writer(fid_)
+                            writer_.writerow([
+                                row_['utterance_id'],
+                                cohort_id_, 
+                                gplda_scores_[cohort_id_], 
+                                ])
+
+                    '''
+                    Displaying progress
+                    '''
+                    print(f'\t{split_id_}', end='\t', flush=True)
+                    print(f'splits=({split_count_}/{total_splits_})', end='\t', flush=True)
+                    print(f'true=({speaker_id_})', end='\t', flush=True)
+                    print(f'cohort scores={gplda_scores_}', end='\n', flush=True)
+                    
+            '''
+            Saving the scores for the selected duration
+            '''
+            with open(score_fName_, 'wb') as f_:
+                pickle.dump(scores_, f_, pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(score_fName_, 'rb') as f_:
+                scores_ = pickle.load(f_)
+        
+        return scores_
+
+
+
+    def evaluate_performance(self, res, opDir, duration):
+        '''
+        Compute performance metrics.
+
+        Parameters
+        ----------
+        res : dict
+            Dictionary containing the sub-utterance wise scores.
+        opDir : str
+            Output path.
+        duration : int
+            Duration of the testing utterance.
+
+        Returns
+        -------
+        metrics_ : dict
+            Disctionary containg the various evaluation metrics:
+                accuracy, precision, recall, f1-score, eer
+
+        '''
+        groundtruth_scores_ = np.empty([])
+        predicted_scores_ = np.empty([])
+        for split_id_ in res.keys():
+            true_speaker_id_ = res[split_id_]['speaker_id']
+            if true_speaker_id_=='0000':
+                continue
+            cohort_scores_ = res[split_id_]['gplda_scores']
+            
+            gt_score_ = []
+            ptd_scores_ = []
+            for cohort_id_ in cohort_scores_.keys():
+                if cohort_id_==true_speaker_id_:
+                    gt_score_.append(1)
+                else:
+                    gt_score_.append(0)
+                ptd_scores_.append(cohort_scores_[cohort_id_])
+                
+            if np.size(groundtruth_scores_)<=1:
+                groundtruth_scores_ = np.array(gt_score_)
+                predicted_scores_ = np.array(ptd_scores_)
+            else:
+                groundtruth_scores_ = np.append(groundtruth_scores_, np.array(gt_score_), axis=0)
+                predicted_scores_ = np.append(predicted_scores_, np.array(ptd_scores_), axis=0)
+                
+        if not np.sum(groundtruth_scores_)==0:            
+            if not np.size(groundtruth_scores_)<=1:
+                FPR_, TPR_, EER_, EER_thresh_ = PerformanceMetrics().compute_eer(groundtruth_scores_, predicted_scores_)
+            else:
+                FPR_ = np.empty([])
+                TPR_ = np.empty([])
+                EER_ = -1
+                EER_thresh_ = np.empty([])                
+        else:
+            FPR_ = np.empty([])
+            TPR_ = np.empty([])
+            EER_ = -1
+            EER_thresh_ = np.empty([])
+                
+        metrics_ = {
+            'fpr': FPR_,
+            'tpr': TPR_,
+            'eer': EER_,
+            'eer_threshold': EER_thresh_,
+            }
+            
+        print(f'\n\nUtterance duration: {duration}s:\n__________________________________________')
+        print(f"\tEER: {np.round(np.mean(metrics_['eer'])*100,2)}")
+
+        with open(opDir+'/Performance.txt', 'a+') as f_:
+            f_.write(f'Utterance duration: {duration}s:\n__________________________________________\n')
+            f_.write(f"\tEER: {np.round(np.mean(metrics_['eer'])*100,2)}\n\n")
+        
+        return metrics_

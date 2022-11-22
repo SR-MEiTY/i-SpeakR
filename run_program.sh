@@ -10,7 +10,7 @@
 #python train_test_model.py --model_type I-Vector
 
 
-python data_preparation.py --dev_path /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset_new/DEV/ --dev_key /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset_new/DEV.csv --enr_path /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset_new/ENR/ --enr_key /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset_new/ENR.csv --test_path /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset_new/TEST/ --test_key /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset_new/TEST.csv
+python data_preparation.py --dev_path /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset/DEV/ --dev_key /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset/DEV.csv --enr_path /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset/ENR/ --enr_key /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset/ENR.csv --test_path /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset/TEST/ --test_key /home/mrinmoy/Documents/Speaker_Recognition_MeitY_Project/Project_Related/Toolkit/Test_Dataset/TEST.csv
 python feature_computation.py
 python train_test_model.py
 

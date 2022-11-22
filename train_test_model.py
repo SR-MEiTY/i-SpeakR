@@ -24,14 +24,18 @@ import json
 '''
 I-Vector :: Speaker Verification System
 '''
-def ivector_sv(PARAMS):
+def ivector_sv(PARAMS, feat_info_):
     IVec_ = IVector(
         ubm_dir=PARAMS['ubm_dir'], 
         model_dir=PARAMS['model_dir'], 
         opDir=PARAMS['output_dir'],
-        num_mixtures=int(PARAMS['ubm_ncomponents']), 
+        num_mixtures=int(PARAMS['ubm_ncomponents']),
+        ivec_dim=int(PARAMS['rank_tv']),
+        tv_iteration=int(PARAMS['tv_iteration']),
         feat_scaling=int(PARAMS['feature_scaling']),
-        mem_limit=int(PARAMS['ubm_memory_limit'])
+        mem_limit=int(PARAMS['ubm_memory_limit']),
+        lda=False,
+        wccn=False,
         )
     
     '''
@@ -47,7 +51,8 @@ def ivector_sv(PARAMS):
         IVec_.train_ubm(
             FV_dev_,
             ram_mem_req_,
-            cov_type=PARAMS['covariance_type']
+            cov_type=PARAMS['covariance_type'],
+            ubm_dir=PARAMS['ubm_dir'],
             )
     else:
         print('The GMM-UBM is already available')
@@ -63,7 +68,7 @@ def ivector_sv(PARAMS):
             info=feat_info_[PARAMS['dev_set']], 
             feature_name=PARAMS['feature_name']
             ).load(dim=int(PARAMS['num_dim']))
-        IVec_.train_t_matrix(FV_dev_, tv_mat_fName_)
+        IVec_.train_tv_matrix(FV_dev_, tv_mat_fName_)
     else:
         print('The Total Variability matrix is already trained')
     print('\n\n')
@@ -76,12 +81,22 @@ def ivector_sv(PARAMS):
         info=feat_info_[PARAMS['dev_set']], 
         feature_name=PARAMS['feature_name']
         ).load(dim=int(PARAMS['num_dim']))
-    dev_ivec_dir_ = PARAMS['model_dir']+'/'+PARAMS['dev_set']+'_ivector/'
+    dev_ivec_dir_ = PARAMS['model_dir'] + '/' + PARAMS['dev_set'] + '_ivector/'
     IVec_.extract_ivector(FV_dev_, tv_mat_fName_, dev_ivec_dir_)
+
     '''
     PLDA Training
     '''
-    IVec_.plda_training(FV_dev_, dev_ivec_dir_)
+    gplda_fName_ = PARAMS['model_dir'] + '/G_PLDA.pkl'
+    if not os.path.exists(gplda_fName_):
+        gplda_model_, projection_matrix_ = IVec_.plda_training(FV_dev_, dev_ivec_dir_)
+        gplda_classifier_ = {'gplda_model':gplda_model_, 'projection_matrix': projection_matrix_}
+        with open(gplda_fName_, 'wb') as fid_:
+            pickle.dump(gplda_classifier_, fid_, pickle.HIGHEST_PROTOCOL)
+    else:
+        print('G-PLDA model already trained')
+        with open(gplda_fName_, 'rb') as fid_:
+            gplda_classifier_ = pickle.load(fid_)
 
 
     '''
@@ -95,15 +110,51 @@ def ivector_sv(PARAMS):
     IVec_.extract_ivector(FV_enr_, tv_mat_fName_, enr_ivec_dir_)
 
 
+    ''' 
+    Testing the trained models 
     '''
-    Extracting Test I-Vectors
-    '''
-    FV_test_, ram_mem_req_ = LoadFeatures(
-        info=feat_info_[PARAMS['test_set']], 
-        feature_name=PARAMS['feature_name']
-        ).load(dim=int(PARAMS['num_dim']))
-    test_ivec_dir_ = PARAMS['model_dir']+'/'+PARAMS['test_set']+'_ivector/'
-    IVec_.extract_ivector(FV_test_, tv_mat_fName_, test_ivec_dir_)
+    print('Testing the trained models')
+    test_opDir_ = PARAMS['output_dir'] + '/' + PARAMS['test_key'].split('/')[-1].split('.')[0] + '_' + PARAMS['model_type'] + '/'
+    if not os.path.exists(test_opDir_):
+        os.makedirs(test_opDir_)
+    FPR_ = {}
+    TPR_ = {}
+    test_chop = json.loads(PARAMS.get('test_chop'))
+    for utter_dur_ in test_chop:
+        res_fName = test_opDir_ + '/Result_' + str(utter_dur_) + 's.pkl'
+        if not os.path.exists(res_fName):            
+            '''
+            Utterance-wise testing
+            '''
+            scores_ = IVec_.perform_testing(
+                enr_ivec_dir_, 
+                tv_fName=tv_mat_fName_,
+                classifier=gplda_classifier_,
+                opDir=test_opDir_,
+                feat_info=feat_info_[PARAMS['test_set']], 
+                dim=int(PARAMS['num_dim']), 
+                test_key=PARAMS['data_info_dir']+'/'+PARAMS['test_key'].split('/')[-1],
+                duration=utter_dur_,
+                )
+            
+            with open(res_fName, 'wb') as f_:
+                pickle.dump({'scores':scores_}, f_, pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(res_fName, 'rb') as f_:
+                scores_ = pickle.load(f_)['scores']
+
+        ''' 
+        Computing the performance metrics 
+        '''
+        metrics_ = IVec_.evaluate_performance(scores_, test_opDir_, utter_dur_)
+        FPR_[utter_dur_] = metrics_['fpr']
+        TPR_[utter_dur_] = metrics_['tpr']
+            
+    roc_opFile_ = test_opDir_ + '/ROC.png'
+    PerformanceMetrics().plot_roc(FPR_, TPR_, roc_opFile_)
+
+
+
 
 
 
@@ -111,7 +162,7 @@ def ivector_sv(PARAMS):
 '''
 GMM-UBM :: Speaker Verification System
 '''
-def gmm_ubm_sv(PARAMS):
+def gmm_ubm_sv(PARAMS, feat_info_):
     print('Creating a GaussianBackground model object')
     GB_ = GaussianBackground(
         model_dir=PARAMS['ubm_dir'], 
@@ -162,7 +213,7 @@ def gmm_ubm_sv(PARAMS):
     Testing the trained models 
     '''
     print('Testing the trained models')
-    test_opDir_ = PARAMS['output_dir'] + '/' + PARAMS['test_key'].split('/')[-1].split('.')[0] + '/'
+    test_opDir_ = PARAMS['output_dir'] + '/' + PARAMS['test_key'].split('/')[-1].split('.')[0]+ '_' + PARAMS['model_type'] + '/'
     if not os.path.exists(test_opDir_):
         os.makedirs(test_opDir_)
     
@@ -268,11 +319,11 @@ if __name__ == '__main__':
     
     print('Feature details..')
     if PARAMS['feature_name']=='MFCC':
-        feat_info_ = MFCC(config=PARAMS).get_feature_details()
+        feature_info_ = MFCC(config=PARAMS).get_feature_details()
         print('Feature details obtained')
     
     if PARAMS['model_type']=='gmm_ubm':
-        gmm_ubm_sv(PARAMS)
+        gmm_ubm_sv(PARAMS, feature_info_)
         
     if PARAMS['model_type']=='i_vector':
-        ivector_sv(PARAMS)        
+        ivector_sv(PARAMS, feature_info_)        

@@ -102,7 +102,7 @@ if __name__ == '__main__':
     InFunc.update_execution_config(CFG, CFG)
     InFunc.update_execution_config(CFG, {
         'output_path': CFG['output_path'], 
-        'data_path': CFG['data_path'], 
+        # 'data_path': CFG['data_path'], 
         'data_info': CFG['data_info'],
         # 17 Sep 22
         'dev_path': CFG['dev_path'],
