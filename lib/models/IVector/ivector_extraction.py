@@ -577,8 +577,8 @@ class IVector:
                     I_vectors_ = pickle.load(f_)
                     enr_ivectors_[speaker_id_] = I_vectors_.T
                                 
-            confusion_matrix_ = np.zeros((len(enrolled_speakers_), len(enrolled_speakers_)))
-            match_count_ = np.zeros(len(enrolled_speakers_))
+            # confusion_matrix_ = np.zeros((len(enrolled_speakers_), len(enrolled_speakers_)))
+            # match_count_ = np.zeros(len(enrolled_speakers_))
             
             '''
             Testing every test utterance one by one 
@@ -661,7 +661,7 @@ class IVector:
                                 if (self.LDA) or (self.WCCN):
                                     enr_ivec_ = classifier['projection_matrix'] @ enr_ivec_
                                 spk_scores_.append(compute_gplda_score(classifier['gplda_model'], enr_ivec_, test_ivec_))
-                            gplda_scores_[index_i_] = np.min(spk_scores_)
+                            gplda_scores_[index_i_] = np.mean(spk_scores_)
                     # print(gplda_scores_)
                     
                     scores_[split_id_] = {
