@@ -194,7 +194,7 @@ def GPLDA_computation(ivector_per_speaker, lda_dim=20, perform_LDA=False, perfor
     '''
     V_ = np.random.normal(loc=0.0, scale=1.0, size=(D_, num_eigen_voices_))
     Lambda_ = np.linalg.pinv(np.divide(S_, N_))     
-    min_divergence_ = True
+    min_divergence_ = False
     
     for iter_i_ in range(num_iter):
         # print(f'G-PLDA: iter:{iter_i_}')
@@ -243,7 +243,9 @@ def GPLDA_computation(ivector_per_speaker, lda_dim=20, perform_LDA=False, perfor
         # MINIMUM DIVERGENCE
         if min_divergence_:
             gamma_ = np.divide(gamma_, K_) # Equation (A.18) in [13]
-            V_ = V_ @ np.linalg.cholesky(gamma_ @ gamma_.T) # Equation (A.22) in [13]. Originally cholesky decomposition of gamma_ is performed. But, this operation requires a positive definite matrix and gamma_ is not positive definite always. Hence, (gamma_ @ gamma_.T) is performed  
+            # V_ = V_ @ np.linalg.cholesky(gamma_) # Equation (A.22) in [13]. 
+            # Originally cholesky decomposition of gamma_ is performed. But, this operation requires a positive definite matrix and gamma_ is not positive definite always. Hence, (gamma_ @ gamma_.T) is performed  
+            V_ = V_ @ np.linalg.cholesky(gamma_ @ gamma_.T) # Equation (A.22) in [13]. 
 
     gpldaModel_ = {
         'mu': mu_,
