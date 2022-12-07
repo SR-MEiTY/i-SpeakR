@@ -20,6 +20,7 @@ import time
 from lib.models.IVector.gplda import GPLDA_computation, compute_gplda_score
 import csv
 from lib.metrics.performance_metrics import PerformanceMetrics
+from joblib import Parallel, delayed
 
 
 
@@ -237,6 +238,24 @@ class IVector:
 
 
 
+    def compute_expectations(self, s_, N_, n_feat_, T_mat_, TtimesInverseSSdiag_, I_, F_):
+        time1 = time.process_time()
+        Nc_ = np.repeat(np.array(np.tile(N_, [n_feat_]), ndmin=2), self.IVEC_DIM, axis=0)
+        # print(f'I_={I_.shape} TtimesInverseSSdiag_={TtimesInverseSSdiag_.shape}, Nc_={Nc_.shape} T_mat_={T_mat_.shape}')
+        L_ = I_ + (np.multiply(TtimesInverseSSdiag_, Nc_) @ T_mat_)
+        # print(f'L_={L_.shape}')
+        Linv_ = np.linalg.pinv(L_)
+        # print(f'Linv_={Linv_[s_].shape}')
+        Ey_ = Linv_ @ TtimesInverseSSdiag_ @ F_
+        # print(f'Ey_={Ey_[s_].shape}')
+        Eyy_ = Linv_ + Ey_ @ Ey_.T
+        print(f'{s_} {np.round(time.process_time()-time1,2)}s\t\t\t')
+        
+        return s_, Linv_, Ey_, Eyy_
+
+
+
+
     def train_tv_matrix(self, X, tv_fName):
         '''
         Training the Total Variability matrix
@@ -297,8 +316,8 @@ class IVector:
         
         print('Initializing T matrix (randomly)')
         # print(f'F_={np.shape(F_)} Sigma_={np.shape(Sigma_)}')
-        T_mat_ = np.random.normal(loc=0.0, scale=0.0001, size=(np.shape(Sigma_)[0], self.IVEC_DIM))
-        T_mat_ /= np.linalg.norm(T_mat_) # (19968 x 100)
+        T_mat_ = np.random.normal(loc=0.0, scale=1.0, size=(np.shape(Sigma_)[0], self.IVEC_DIM))
+        T_mat_ = np.divide(T_mat_, np.repeat(np.array(np.linalg.norm(T_mat_, axis=1), ndmin=2).T, np.shape(T_mat_)[1], axis=1)) # (19968 x 100)
         # print(f'T_mat_ = {T_mat_.shape}')
         
         # we don't use the second order stats - set 'em to empty matrix
@@ -322,6 +341,8 @@ class IVector:
             TtimesInverseSSdiag_ = np.divide(T_mat_, np.repeat(np.array(Sigma_, ndmin=2).T, self.IVEC_DIM, axis=1)+1e-10).T # (19968 x 100)
             # print(f'TtimesInverseSSdiag_={np.shape(TtimesInverseSSdiag_)}')
             
+            time1 = time.process_time()
+            spk_count_ = 0
             for s_ in N_.keys():
                 # print(f'N_[s_]={N_[s_].shape}')
                 Nc_ = np.repeat(np.array(np.tile(N_[s_], [n_feat_]), ndmin=2), self.IVEC_DIM, axis=0)
@@ -334,6 +355,16 @@ class IVector:
                 # print(f'Ey_={Ey_[s_].shape}')
                 Eyy_[s_] = Linv_[s_] + Ey_[s_] @ Ey_[s_].T
                 # print(f'Eyy_={Eyy_[s_].shape}')
+                spk_count_ += 1
+                print(f'\t\t({spk_count_}/{len(N_)}) {s_} {np.round(time.process_time()-time1,2)}s\t\t\t', end='\r', flush=True)
+            print('')
+            
+            # s_temp_, Linv_temp_, Ey_temp_, Eyy_temp_ = zip(*Parallel(n_jobs=20)(delayed(self.compute_expectations)(s_, N_[s_], n_feat_, T_mat_, TtimesInverseSSdiag_, I_, F_) for s_ in N_.keys()))
+            # print(f's_temp_={len(s_temp_)}')
+            
+            # import sys
+            # sys.exit()
+
 
             # 2. Accumlate statistics across the speakers
             Eymat_ = []
@@ -408,6 +439,7 @@ class IVector:
         # print('Background model loaded')
 
         Mu_ = self.BACKGROUND_MODEL.means_ # UBM Mean super-vector (n_comp_, n_feat_)
+        # print(f'Mu_={np.shape(Mu_)}')
         Sigma_ = np.empty([], dtype=np.float32)
         if len(np.shape(self.BACKGROUND_MODEL.covariances_))==3:
             Sigma_ = np.zeros((np.shape(self.BACKGROUND_MODEL.covariances_)[0], np.shape(self.BACKGROUND_MODEL.covariances_)[1]))
@@ -415,26 +447,54 @@ class IVector:
                 Sigma_[comp_i_,:] = np.diag(self.BACKGROUND_MODEL.covariances_[comp_i_,:,:])
         else:
             Sigma_ = self.BACKGROUND_MODEL.covariances_
+        # print(f'Sigma_={np.shape(Sigma_)}')
         Sigma_ = Sigma_.flatten() # UBM Variance super-vector
+        # print(f'Sigma_={np.shape(Sigma_)}')
 
         lld_ = self.BACKGROUND_MODEL.predict_proba(X) # (1280, 512)
+        # print(f'lld_={np.shape(lld_)}')
         # Compute a posteriori normalized probability
-        amax = np.max(lld_, axis=0) # (512,)
-        amax_arr = np.repeat(np.array(amax, ndmin=2), np.shape(lld_)[0], axis=0) # (1280, 512)
-        lld_sum_ = amax + np.log(np.sum(np.exp(np.subtract(lld_,amax_arr)), axis=0)) # (512,)
+        amax_ = np.max(lld_, axis=0) # (512,)
+        # print(f'amax_={np.shape(amax_)}')
+        # print(amax_)
+        amax_arr_ = np.repeat(np.array(amax_, ndmin=2), np.shape(lld_)[0], axis=0) # (1280, 512)
+        # print(f'amax_arr_={np.shape(amax_arr_)}')
+        # print(np.log(np.sum(np.exp(np.subtract(lld_, amax_arr_)), axis=0)))
+        lld_sum_ = amax_ + np.log(np.sum(np.exp(np.subtract(lld_, amax_arr_)), axis=0)) # (512,)
+        # print(f'lld_sum_={np.shape(lld_sum_)}')
+        # print(lld_sum_)
         gamma_ = np.exp(np.subtract(lld_, np.repeat(np.array(lld_sum_, ndmin=2), lld_.shape[0], axis=0))) # (512, 1280)
+        # print(f'gamma_={np.shape(gamma_)}')
                 
         # Compute Baum-Welch statistics
         n_ = np.sum(gamma_, axis=0) # (1280,)                
+        # print(f'n_={np.shape(n_)}')
+        # print(n_)
+        # print(f'X={np.shape(X)}')
+        # print(f'X.T@gamma_={np.shape(X.T @ gamma_)}')
+        # print(np.shape(np.multiply(np.repeat(np.array(n_, ndmin=2), Mu_.shape[1], axis=0), Mu_.T)))
         f_ = X.T @ gamma_ - np.multiply(np.repeat(np.array(n_, ndmin=2), Mu_.shape[1], axis=0), Mu_.T) # ((39, 512))
+        # print(f'f_={np.shape(f_)}')
         
+        # print(f'TV={np.shape(TV)}')
+        # print(f'TV max={np.max(TV, axis=1)}')
+        # print(f'Sigma_={np.shape(Sigma_)}')
         TS_ = np.divide(TV, np.repeat(np.array(Sigma_, ndmin=2).T, TV.shape[1], axis=1)) # (19968, 100)
+        # print(f'TS_={np.shape(TS_)}')
         TSi_ = TS_.T # (19968, 100)
+        # print(f'TSi_={np.shape(TSi_)}')
         I_ = np.eye(self.IVEC_DIM) # (100, 100)
+        # print(f'I_={np.shape(I_)}')
         n_feat_ = Mu_.shape[1] # 39
+        # print(f'n_feat_={n_feat_}')
         TS_temp_ = np.multiply(TS_, np.repeat(np.array(np.tile(n_, [n_feat_]), ndmin=2).T, self.IVEC_DIM, axis=1)) # (19968, 100)
+        # print(f'TS_temp_={np.shape(TS_temp_)}')
         w_ = np.linalg.pinv(I_ + TS_temp_.T @ TV) @ TSi_ @ f_.flatten()
         # print(f'w_={np.shape(w_)}')
+        # print(w_)
+        
+        # import sys
+        # sys.exit(0)
         
         return w_
         

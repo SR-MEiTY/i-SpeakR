@@ -34,8 +34,6 @@ def ivector_sv(PARAMS, feat_info_):
         tv_iteration=int(PARAMS['tv_iteration']),
         feat_scaling=int(PARAMS['feature_scaling']),
         mem_limit=int(PARAMS['ubm_memory_limit']),
-        # lda=False,
-        # wccn=False,
         )
     
     '''
@@ -84,8 +82,9 @@ def ivector_sv(PARAMS, feat_info_):
     dev_ivec_dir_ = PARAMS['model_dir'] + '/' + PARAMS['dev_set'] + '_ivector/'
     IVec_.extract_ivector(FV_dev_, tv_mat_fName_, dev_ivec_dir_)
 
+
     '''
-    PLDA Training
+    G-PLDA Training
     '''
     gplda_fName_ = PARAMS['model_dir'] + '/G_PLDA.pkl'
     if not os.path.exists(gplda_fName_):
