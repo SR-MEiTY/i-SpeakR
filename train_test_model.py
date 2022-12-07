@@ -34,8 +34,8 @@ def ivector_sv(PARAMS, feat_info_):
         tv_iteration=int(PARAMS['tv_iteration']),
         feat_scaling=int(PARAMS['feature_scaling']),
         mem_limit=int(PARAMS['ubm_memory_limit']),
-        lda=False,
-        wccn=False,
+        # lda=False,
+        # wccn=False,
         )
     
     '''
@@ -89,7 +89,7 @@ def ivector_sv(PARAMS, feat_info_):
     '''
     gplda_fName_ = PARAMS['model_dir'] + '/G_PLDA.pkl'
     if not os.path.exists(gplda_fName_):
-        gplda_model_, projection_matrix_ = IVec_.plda_training(FV_dev_, dev_ivec_dir_)
+        gplda_model_, projection_matrix_ = IVec_.plda_training(FV_dev_, dev_ivec_dir_, lda_dim=20, LDA=True, WCCN=True)
         gplda_classifier_ = {'gplda_model':gplda_model_, 'projection_matrix': projection_matrix_}
         with open(gplda_fName_, 'wb') as fid_:
             pickle.dump(gplda_classifier_, fid_, pickle.HIGHEST_PROTOCOL)

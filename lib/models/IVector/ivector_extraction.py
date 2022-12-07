@@ -33,7 +33,7 @@ class IVector:
     N_BATCHES = 0
     
     
-    def __init__(self, ubm_dir, model_dir, opDir, num_mixtures=128, ivec_dim=100, feat_scaling=0, tv_iteration=10, mem_limit=5000, lda=True, wccn=True):
+    def __init__(self, ubm_dir, model_dir, opDir, num_mixtures=128, ivec_dim=100, feat_scaling=0, tv_iteration=10, mem_limit=5000): #, lda=True, wccn=True):
         self.UBM_DIR = ubm_dir
         self.MEM_LIMIT = mem_limit
         self.MODEL_DIR = model_dir
@@ -43,8 +43,8 @@ class IVector:
         self.FEATURE_SCALING = feat_scaling
         self.N_BATCHES = 1
         self.TV_ITERATION = tv_iteration
-        self.LDA = lda
-        self.WCCN = wccn
+        # self.LDA = lda
+        # self.WCCN = wccn
     
     
     def train_ubm(self, X, ram_mem_req, cov_type='diag', ubm_dir='', max_iterations=100, num_init=1, verbosity=1):
@@ -490,7 +490,7 @@ class IVector:
     
     
     
-    def plda_training(self, X, model_dir):
+    def plda_training(self, X, model_dir, lda_dim=20, LDA=False, WCCN=False):
         '''
         Training PLDA model.
 
@@ -514,7 +514,7 @@ class IVector:
                 ivector_per_speaker_[speaker_id_] = I_vectors_.T
                 print(f'speaker={speaker_id_} ivector={np.shape(ivector_per_speaker_[speaker_id_])}')
         
-        gpldaModel_, projectionMatrix_ = GPLDA_computation(ivector_per_speaker_, lda_dim=20, perform_LDA=self.LDA, perform_WCCN=self.WCCN, num_iter=50)
+        gpldaModel_, projectionMatrix_ = GPLDA_computation(ivector_per_speaker_, num_eigen_vectors=lda_dim, perform_LDA=LDA, perform_WCCN=WCCN, num_iter=50)
         
         return gpldaModel_, projectionMatrix_
 
@@ -558,8 +558,8 @@ class IVector:
         print(f'scores={os.path.exists(score_fName_)}')
         if not os.path.exists(score_fName_):    
             scores_ = {}
-            true_lab_ = []
-            pred_lab_ = []
+            # true_lab_ = []
+            # pred_lab_ = []
             
             '''
             Loading Total Variability matrix
@@ -649,20 +649,30 @@ class IVector:
                             test_ivec_ = pickle.load(ivec_fid_)
                         # print(f'Test {split_id_} ivector loaded')
 
-                    if (self.LDA) or (self.WCCN):
-                        test_ivec_ = classifier['projection_matrix'] @ test_ivec_
+                    print(f"GPLDA: {classifier['gplda_model'].keys()}")
+                    test_ivec_ = classifier['projection_matrix'] @ test_ivec_                    
+                    print(f'test_ivec_={np.shape(test_ivec_)}')
 
                     gplda_scores_ = {}
                     for index_i_ in enr_ivectors_.keys():
                         if index_i_ in cohort_speakers_:
-                            spk_scores_ = []
-                            for utter_i_ in range(enr_ivectors_[index_i_].shape[1]):
-                                enr_ivec_ = enr_ivectors_[index_i_][:,utter_i_]
-                                if (self.LDA) or (self.WCCN):
-                                    enr_ivec_ = classifier['projection_matrix'] @ enr_ivec_
-                                spk_scores_.append(compute_gplda_score(classifier['gplda_model'], enr_ivec_, test_ivec_))
-                            gplda_scores_[index_i_] = np.mean(spk_scores_)
-                    # print(gplda_scores_)
+                            
+                            # spk_scores_ = []
+                            # for utter_i_ in range(enr_ivectors_[index_i_].shape[1]):
+                            #     enr_ivec_ = enr_ivectors_[index_i_][:,utter_i_]
+                            #     if (self.LDA) or (self.WCCN):
+                            #         enr_ivec_ = classifier['projection_matrix'] @ enr_ivec_
+                            #     spk_scores_.append(compute_gplda_score(classifier['gplda_model'], enr_ivec_, test_ivec_))
+                            # gplda_scores_[index_i_] = np.mean(spk_scores_)
+                            
+
+                            enr_ivec_ = classifier['projection_matrix'] @ enr_ivectors_[index_i_]
+                            mean_enr_ivec_ = np.mean(enr_ivec_, axis=1)
+                            gplda_scores_[index_i_] = compute_gplda_score(classifier['gplda_model'], mean_enr_ivec_, test_ivec_)
+                            # print(f'{index_i_} gplda_scores_={np.shape(gplda_scores_[index_i_])}')
+                    
+                    # import sys
+                    # sys.exit(0)
                     
                     scores_[split_id_] = {
                         'speaker_id':speaker_id_, 
