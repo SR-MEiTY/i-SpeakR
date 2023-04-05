@@ -1,10 +1,13 @@
+'''
+
+'''
+
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
 from XvecSpeechGenerator import XvecSpeechGenerator
 import torch.nn as nn
 import os
-import numpy as np
 from torch import optim
 import argparse
 from x_vector_Indian_LID import X_vector
@@ -16,7 +19,6 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 import pandas as pd
 import shutil
 import matplotlib.pyplot as plt
-import os
 import sys
 
 
@@ -42,7 +44,7 @@ win_length = 78
 n_fft = 78
 batch_size = 10
 use_gpu = False
-num_epochs = 2
+num_epochs = 20
 
 
 feat_path = '/home/mrinmoy/Documents/Professional/Senior_Project_Engineer_IIT_Dharwad_IndicASV/Toolkit/i-SpeakR_output/Test_Dataset/features/MFCC/'
@@ -116,10 +118,8 @@ loss_fun = nn.CrossEntropyLoss()
 
 
 speaker_xvec_path = '/home/mrinmoy/Documents/Professional/Senior_Project_Engineer_IIT_Dharwad_IndicASV/Toolkit/i-SpeakR_output/Test_Dataset/TEST_Xvector/xvectors/'
-# if not os.path.exists(speaker_xvec_path):
-#     os.makedirs(speaker_xvec_path)
     
-def train(dataloader_train,epoch):
+def train(dataloader_train, epoch):
     train_loss_list=[]
     full_preds=[]
     full_gts=[]
@@ -141,14 +141,18 @@ def train(dataloader_train,epoch):
         print('Processing batch', 'Dev ', count)
         feat = np.empty([])
         for torch_tensor in sample_batched[0]:
-            print(np.shape(torch_tensor))
+            # print(np.shape(torch_tensor))
+            fv = torch_tensor.numpy()
             if np.size(feat)<=1:
-                feat = np.expand_dims(torch_tensor.numpy().astype(float).T, axis=0)
+                feat = np.expand_dims(fv.T, axis=0)
             else:
-                feat = np.append(feat, np.expand_dims(torch_tensor.numpy().astype(float).T, axis=0), axis=0)
+                if np.shape(feat)[1]>np.shape(fv)[1]:
+                    feat = feat[:,:np.shape(fv)[1],:]
+                elif np.shape(fv)[1]>np.shape(feat)[1]:
+                    fv = fv[:,:np.shape(feat)[1]]
+                feat = np.append(feat, np.expand_dims(fv.T, axis=0), axis=0)
         # feat = np.asarray(feat)
-        print(f'feat = {np.shape(feat)}')
-        
+        # print(f'feat = {np.shape(feat)}')
         
         #count = count + 1
         # features = torch.from_numpy(np.asarray([torch_tensor.numpy() for torch_tensor in sample_batched[0]])).float()
@@ -156,8 +160,8 @@ def train(dataloader_train,epoch):
         labels = torch.from_numpy(np.asarray([torch_tensor[0].numpy() for torch_tensor in sample_batched[1]]))
         paths = np.asarray([torch_tensor for torch_tensor in sample_batched[2]])
 
-        print(f'features = {np.shape(features)}')
-        print(f'labels = {np.shape(labels)}')
+        # print(f'features = {np.shape(features)}')
+        # print(f'labels = {np.shape(labels)}')
         
         #print("Processing files ", paths)
         features, labels = features.to(device),labels.to(device)
@@ -196,7 +200,7 @@ def train(dataloader_train,epoch):
     df.to_csv(os.path.join(xvec_feat_path, 'dev_xvect_feat.csv'), encoding='utf-8')
     print('Total training loss {} and training Accuracy {} after {} epochs'.format(mean_loss,mean_acc,epoch))
     rand = np.random.rand()
-    model_save_path = os.path.join('save_model')
+    model_save_path = os.path.join(speaker_xvec_path, 'save_model')
     if not os.path.exists(model_save_path):
         os.makedirs(model_save_path)
     path = os.path.join(model_save_path, 'train_best_check_point_' + str(epoch) + '_' + str(mean_loss) + '_' + str(rand))
@@ -206,32 +210,50 @@ def train(dataloader_train,epoch):
 
 
 
-def validation(dataloader_val, mode):
+def validation(dataloader_val, epoch, mode):
     #model1 = torch.load("C:\\Users\\Talib\\Downloads\\talib\\talib\\X-vector_codes\\save_model\\best_check_point_1_1.395266056060791_0.761649240146505")
     model = X_vector(input_dim, num_classes).to(device)
     #model.state_dict(torch.load("/home/fathima/Desktop/x_py/x_vector-25-10/save_model/train_best_check_point_2_0.6299841274817785_0.6732803042366898"))
     print("Processing mode {}".format( mode))
     #model.eval()
 
-    path = "xvector"
+    # path = "xvector"
     count = 0
     xvec_feat_path = ""
     df = pd.DataFrame(columns=['x_vec_path', 'label'])
-    if mode == "dev":
-        xvec_feat_path = os.path.join(speaker_xvec_path, "dev")
-    elif mode == "train":
-        xvec_feat_path = os.path.join(speaker_xvec_path, "train")
+    if mode == 'dev':
+        xvec_feat_path = os.path.join(speaker_xvec_path, 'dev')
+    elif mode == 'train':
+        xvec_feat_path = os.path.join(speaker_xvec_path, 'train')
     else:
-        xvec_feat_path = os.path.join(speaker_xvec_path, "test")
+        xvec_feat_path = os.path.join(speaker_xvec_path, 'test')
     if os.path.exists(xvec_feat_path):
         shutil.rmtree(xvec_feat_path)
     os.mkdir(xvec_feat_path)
+    
     with torch.no_grad():
         val_loss_list=[]
         full_preds=[]
         full_gts=[]
         for i_batch, sample_batched in enumerate(dataloader_val):
-            features = torch.from_numpy(np.asarray([torch_tensor.numpy().T for torch_tensor in sample_batched[0]])).float()
+            feat = np.empty([])
+            for torch_tensor in sample_batched[0]:
+                # print(np.shape(torch_tensor))
+                fv = torch_tensor.numpy()
+                if np.size(feat)<=1:
+                    feat = np.expand_dims(fv.T, axis=0)
+                else:
+                    if np.shape(feat)[1]>np.shape(fv)[1]:
+                        feat = feat[:,:np.shape(fv)[1],:]
+                    elif np.shape(fv)[1]>np.shape(feat)[1]:
+                        fv = fv[:,:np.shape(feat)[1]]
+                    feat = np.append(feat, np.expand_dims(fv.T, axis=0), axis=0)
+            # feat = np.asarray(feat)
+            # print(f'feat = {np.shape(feat)}')
+            features = torch.from_numpy(feat)
+
+            # features = torch.from_numpy(np.asarray([torch_tensor.numpy().T for torch_tensor in sample_batched[0]])).float()
+            
             labels = torch.from_numpy(np.asarray([torch_tensor[0].numpy() for torch_tensor in sample_batched[1]]))
             paths = np.asarray([torch_tensor for torch_tensor in sample_batched[2]])
             print("Processing  batch count {}".format(count))
@@ -258,15 +280,15 @@ def validation(dataloader_val, mode):
         mean_acc = accuracy_score(full_gts,full_preds)
         mean_loss = np.mean(np.asarray(val_loss_list))
         #print("Training xvector ", x_vec.detach().numpy())
-        if mode == "dev":
-            path = os.path.join(path, "dev_x_vec.npy")
-        elif mode == "test":
-            path = os.path.join(path, "test_x_vec.npy")
+        if mode == 'dev':
+            path = os.path.join(speaker_xvec_path, 'dev_x_vec.npy')
+        elif mode == 'test':
+            path = os.path.join(speaker_xvec_path, 'test_x_vec.npy')
         else:
-            path = os.path.join(path, "train_x_vec.npy")
+            path = os.path.join(speaker_xvec_path, 'train_x_vec.npy')
         np.save(path, x_vec.cpu().detach().numpy())
-        df.to_csv(os.path.join(xvec_feat_path, "train_xvect_feat.csv"), encoding='utf-8')
-        print('Total vlidation loss {} and Validation accuracy {} after'.format(mean_loss,mean_acc))
+        df.to_csv(os.path.join(xvec_feat_path, 'train_xvect_feat.csv'), encoding='utf-8')
+        print('Total validation loss {} and Validation accuracy {} after'.format(mean_loss,mean_acc))
 
     
     
@@ -276,16 +298,16 @@ if __name__ == '__main__':
     train_acc = []
    
     for epoch in range(num_epochs):
-            loss, acc = train(dataloader_dev,epoch)
-            trainloss.append(loss)
-            train_acc.append(acc)
-            #validation(dataloader_train, epoch, "train")
-            #validation(dataloader_test, epoch, "test")
-            plt.plot(trainloss)
-            plt.show()
+        loss, acc = train(dataloader_dev,epoch)
+        trainloss.append(loss)
+        train_acc.append(acc)
+        validation(dataloader_train, epoch, 'train')
+        validation(dataloader_test, epoch, 'test')
+        plt.plot(trainloss)
+    plt.show()
     
-    '''
-    validation(dataloader_dev, "dev")
-    validation(dataloader_train, "train")
-    validation(dataloader_test, "test")
-    '''
+    validation(dataloader_dev, 0, 'dev')
+    validation(dataloader_train, 0, 'train')
+    validation(dataloader_test, 0, 'test')
+
+    
