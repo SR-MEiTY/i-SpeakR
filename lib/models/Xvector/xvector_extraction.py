@@ -38,7 +38,8 @@ class XvectorComputation:
     optimizer = None
     loss_fun = None
 
-    def __init__(self, input_dim, num_classes, win_length, n_fft, batch_size, use_gpu, num_epochs, feat_path, speaker_xvec_path):    
+
+    def __init__(self, input_dim, num_classes, win_length, n_fft, batch_size, use_gpu, num_epochs, feat_path, speaker_xvec_path):
         self.input_dim = input_dim
         self.num_classes = num_classes
         self.win_length = win_length
@@ -49,11 +50,11 @@ class XvectorComputation:
         self.feat_path = feat_path
         self.speaker_xvec_path = speaker_xvec_path
 
+
         all_speakers_dev = {'count': 0}
         self.dev_filepath = self.feat_path + '/Dev_data.txt'
         with open(self.dev_filepath, 'w+') as fid:
             fid.write('')
-        # files = next(os.walk(self.feat_path+'/DEV/'))[2]
         files = next(os.walk(self.feat_path+'/Dev_data/'))[2]
         for fl in files:
             speaker_id = fl.split('.')[0].split('_')[0]
@@ -61,14 +62,13 @@ class XvectorComputation:
                 all_speakers_dev[speaker_id] = str(all_speakers_dev['count'])
                 all_speakers_dev['count'] += 1
             with open(self.dev_filepath, 'a+') as fid:
-                # fid.write(self.feat_path+'/DEV/'+fl+' '+all_speakers[speaker_id]+'\n')
                 fid.write(self.feat_path+'/Dev_data/'+fl+' '+all_speakers_dev[speaker_id]+'\n')
+
         
         all_speakers_training = {'count': 0}
         self.training_filepath = self.feat_path + '/Enr_data.txt'
         with open(self.training_filepath, 'w+') as fid:
             fid.write('')
-        # files = next(os.walk(self.feat_path+'/ENR/'))[2]
         files = next(os.walk(self.feat_path+'/Enr_data/'))[2]
         for fl in files:
             speaker_id = fl.split('.')[0].split('_')[0]
@@ -76,43 +76,55 @@ class XvectorComputation:
                 all_speakers_training[speaker_id] = str(all_speakers_training['count'])
                 all_speakers_training['count'] += 1
             with open(self.training_filepath, 'a+') as fid:
-                # fid.write(self.feat_path+'/ENR/'+fl+' '+all_speakers[speaker_id]+'\n')
                 fid.write(self.feat_path+'/Enr_data/'+fl+' '+all_speakers_training[speaker_id]+'\n')
+
+        
+        self.testing_csv = self.feat_path + '../../data_info/public_test_cohart_edited.csv'
+        test_annotations = {}
+        import csv
+        with open(self.testing_csv, 'r') as csv_fid:
+            reader = csv.DictReader(csv_fid)
+            for row in reader:
+                test_annotations[row['split_id']] = {'speaker_id':row['speaker_id'], 'cohorts':row['cohorts']}
                 
         self.testing_filepath = self.feat_path + '/public_test_cohart_edited.txt'
         with open(self.testing_filepath, 'w+') as fid:
             fid.write('')
-        # files = next(os.walk(self.feat_path+'/TEST/'))[2]
         files = next(os.walk(self.feat_path+'/public_test_cohart_edited/'))[2]
         # files = next(os.walk(self.feat_path+'/private_test_cohort_final/'))[2]
         for fl in files:
-            speaker_id = fl.split('.')[0].split('_')[0]
-            if not speaker_id in all_speakers_training.keys():
-                all_speakers_training[speaker_id] = str(all_speakers_training['count'])
-                all_speakers_training['count'] += 1
+            speaker_count = 0
+            if fl.split('.')[0] in test_annotations.keys():
+                speaker_id = test_annotations[fl.split('.')[0]]['speaker_id']
+                speaker_count = all_speakers_training[speaker_id]
             with open(self.testing_filepath, 'a+') as fid:
-                # fid.write(self.feat_path+'/TEST/'+fl+' '+all_speakers[speaker_id]+'\n')
-                fid.write(self.feat_path+'/public_test_cohart_edited/'+fl+' '+all_speakers_training[speaker_id]+'\n')
+                fid.write(self.feat_path+'/public_test_cohart_edited/'+fl+' '+str(speaker_count)+'\n')
         
+
         ### Data related
         self.dataset_dev = XvecSpeechGenerator(manifest=self.dev_filepath, mode='dev', win_length=self.win_length, n_fft=self.n_fft)
         self.dataloader_dev = DataLoader(self.dataset_dev, batch_size=self.batch_size, shuffle=True, collate_fn=speech_collate)
         
+
         self.dataset_train = XvecSpeechGenerator(manifest=self.training_filepath, mode='train', win_length=self.win_length, n_fft=self.n_fft)
         self.dataloader_train = DataLoader(self.dataset_train, batch_size=self.batch_size, shuffle=True, collate_fn=speech_collate)
         
+
         self.dataset_test = XvecSpeechGenerator(manifest=self.testing_filepath, mode='test', win_length=self.win_length, n_fft=self.n_fft)
         self.dataloader_test = DataLoader(self.dataset_test, batch_size=self.batch_size, shuffle=True, collate_fn=speech_collate)
         
+
         ## Model related
         self.use_cuda = torch.cuda.is_available()
         self.device = torch.device('cuda' if self.use_cuda else 'cpu')
         
+
         print(self.input_dim)
         print(self.num_classes)
         self.test_model = X_vector(self.input_dim, self.num_classes)
         print(self.test_model)
         
+
         self.model = X_vector(self.input_dim, self.num_classes).to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=0.0, betas=(0.9, 0.98), eps=1e-9)
         self.loss_fun = nn.CrossEntropyLoss()
@@ -153,7 +165,7 @@ class XvectorComputation:
         os.mkdir(xvec_feat_path)
     
         for i_batch, sample_batched in enumerate(self.dataloader_train):
-            print('Processing batch', 'Dev ', count)
+            print(f'Processing batch Dev {count}', end='\r', flush=True)
             feat = np.empty([])
             for torch_tensor in sample_batched[0]:
                 # print(np.shape(torch_tensor))
@@ -206,6 +218,7 @@ class XvectorComputation:
                 full_preds.append(pred)
             for lab in labels.detach().cpu().numpy():
                 full_gts.append(lab)
+        print('')
     
         mean_acc = accuracy_score(full_gts,full_preds)
         mean_loss = np.mean(np.asarray(train_loss_list))
@@ -271,7 +284,7 @@ class XvectorComputation:
                 
                 labels = torch.from_numpy(np.asarray([torch_tensor[0].numpy() for torch_tensor in sample_batched[1]]))
                 paths = np.asarray([torch_tensor for torch_tensor in sample_batched[2]])
-                print("Processing  batch count {}".format(count))
+                print(f"Processing Val batch {count}", end='\r', flush=True)
                 numpy_features = features.detach().cpu().numpy()
                 numpy_labels = labels.detach().cpu().numpy()
                 features, labels = features.to(self.device),labels.to(self.device)
@@ -290,7 +303,7 @@ class XvectorComputation:
                     full_preds.append(pred)
                 for lab in labels.detach().cpu().numpy():
                     full_gts.append(lab)
-    
+            print('')
     
             mean_acc = accuracy_score(full_gts,full_preds)
             mean_loss = np.mean(np.asarray(val_loss_list))

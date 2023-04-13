@@ -5,6 +5,7 @@ import torch
 
 
 class X_vector(nn.Module):
+    
     def __init__(self, input_dim = 40, num_classes=8):
         super(X_vector, self).__init__()
         self.tdnn1 = TDNN(input_dim=input_dim, output_dim=512, context_size=5, dilation=1,dropout_p=0.5)
@@ -17,6 +18,7 @@ class X_vector(nn.Module):
         self.segment7 = nn.Linear(512, 512)
         self.output = nn.Linear(512, num_classes)
         self.softmax = nn.Softmax(dim=1)
+        
     def forward(self, inputs):
         tdnn1_out = self.tdnn1(inputs)
         tdnn2_out = self.tdnn2(tdnn1_out)

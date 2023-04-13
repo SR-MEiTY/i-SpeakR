@@ -11,12 +11,104 @@ from lib.feature_computation.compute_mfcc import MFCC
 from lib.feature_computation.load_features import LoadFeatures
 from lib.models.GMM_UBM.gaussian_background import GaussianBackground
 from lib.models.IVector.ivector_extraction import IVector
+from lib.models.Xvector.xvector_stub import XVector
 from lib.metrics.performance_metrics import PerformanceMetrics
 import os
 import pickle
 import configparser
 import argparse
 import json
+
+
+
+'''
+X-Vector :: Speaker Verification System
+'''
+def xvector_sv(PARAMS, feat_info_):
+    XVec_ = XVector(
+        model_dir=PARAMS['model_dir'], 
+        opDir=PARAMS['output_dir'],
+        xvec_dim=int(PARAMS['rank_tv']),
+        feat_scaling=int(PARAMS['feature_scaling']),
+        )
+    
+
+
+    '''
+    G-PLDA Training
+    '''
+    gplda_fName_ = PARAMS['model_dir'] + '/G_PLDA.pkl'
+    if not os.path.exists(gplda_fName_):
+        FV_dev_, ram_mem_req_ = LoadFeatures(
+            info=feat_info_[PARAMS['dev_set']], 
+            feature_name=PARAMS['feature_name']
+            ).load(dim=int(PARAMS['num_dim']))
+        dev_xvec_dir_ = PARAMS['model_dir'] + '/' + PARAMS['dev_key'].split('/')[-1].split('.')[0] + '/'
+        print(f'dev_xvec_dir_={dev_xvec_dir_}')
+        
+        dev_xvec_dir_new_ = PARAMS['model_dir'] + '/' + PARAMS['dev_key'].split('/')[-1].split('.')[0] + '_new/'
+        if not os.path.exists(dev_xvec_dir_new_):
+            XVec_.save_features_required_format(dev_xvec_dir_, dev_xvec_dir_new_)
+
+
+        gplda_model_, projection_matrix_ = XVec_.plda_training(FV_dev_, dev_xvec_dir_new_, lda_dim=20, LDA=True, WCCN=True)
+        gplda_classifier_ = {'gplda_model':gplda_model_, 'projection_matrix': projection_matrix_}
+        with open(gplda_fName_, 'wb') as fid_:
+            pickle.dump(gplda_classifier_, fid_, pickle.HIGHEST_PROTOCOL)
+    else:
+        print('G-PLDA model already trained')
+        with open(gplda_fName_, 'rb') as fid_:
+            gplda_classifier_ = pickle.load(fid_)
+
+
+    enr_xvec_dir_ = PARAMS['model_dir'] + '/' + PARAMS['enr_key'].split('/')[-1].split('.')[0] + '/'
+    enr_xvec_dir_new_ = PARAMS['model_dir'] + '/' + PARAMS['dev_key'].split('/')[-1].split('.')[0] + '_new/'
+    if not os.path.exists(enr_xvec_dir_new_):
+        XVec_.save_features_required_format(enr_xvec_dir_, enr_xvec_dir_new_)
+
+    ''' 
+    Testing the trained models 
+    '''
+    print('Testing the trained models')
+    test_opDir_ = PARAMS['output_dir'] + '/' + PARAMS['test_key'].split('/')[-1].split('.')[0] + '_' + PARAMS['model_type'] + '/'
+    if not os.path.exists(test_opDir_):
+        os.makedirs(test_opDir_)
+    FPR_ = {}
+    TPR_ = {}
+    test_chop = json.loads(PARAMS.get('test_chop'))
+    for utter_dur_ in test_chop:
+        res_fName = test_opDir_ + '/Result_' + str(utter_dur_) + 's.pkl'
+        if not os.path.exists(res_fName):            
+            '''
+            Utterance-wise testing
+            '''
+            scores_ = XVec_.perform_testing(
+                enr_xvec_dir_new_, 
+                classifier=gplda_classifier_,
+                opDir=test_opDir_,
+                feat_info=feat_info_[PARAMS['test_set']], 
+                dim=int(PARAMS['num_dim']), 
+                test_key=PARAMS['data_info_dir']+'/'+PARAMS['test_key'].split('/')[-1],
+                duration=utter_dur_,
+                )
+            
+            with open(res_fName, 'wb') as f_:
+                pickle.dump({'scores':scores_}, f_, pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(res_fName, 'rb') as f_:
+                scores_ = pickle.load(f_)['scores']
+
+        ''' 
+        Computing the performance metrics 
+        '''
+        metrics_ = XVec_.evaluate_performance(scores_, test_opDir_, utter_dur_)
+        FPR_[utter_dur_] = metrics_['fpr']
+        TPR_[utter_dur_] = metrics_['tpr']
+            
+    roc_opFile_ = test_opDir_ + '/ROC.png'
+    PerformanceMetrics().plot_roc(FPR_, TPR_, roc_opFile_)
+
+
 
 
 
@@ -325,4 +417,8 @@ if __name__ == '__main__':
         gmm_ubm_sv(PARAMS, feature_info_)
         
     if PARAMS['model_type']=='i_vector':
-        ivector_sv(PARAMS, feature_info_)        
+        ivector_sv(PARAMS, feature_info_)
+        
+    if PARAMS['model_type']=='x_vector':
+        xvector_sv(PARAMS, feature_info_)
+        
