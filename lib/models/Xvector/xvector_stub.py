@@ -20,6 +20,8 @@ from lib.models.Xvector.gplda import GPLDA_computation, compute_gplda_score
 import csv
 from lib.metrics.performance_metrics import PerformanceMetrics
 from joblib import Parallel, delayed
+import torch
+from lib.models.Xvector.x_vector_Indian_LID import X_vector
 
 
 
@@ -132,7 +134,7 @@ class XVector:
 
 
 
-    def perform_testing(self, enr_xvec_dir, tv_fName, classifier=None, opDir='', feat_info=None,  dim=None, test_key=None, duration=None):
+    def perform_testing(self, enr_xvec_dir, classifier=None, opDir='', feat_info=None,  dim=None, test_key=None, duration=None):
         '''
         Test i-vector based speaker recognition system
 
@@ -140,8 +142,6 @@ class XVector:
         ----------
         enr_xvec_dir : str
             Enrollment i-vector directory.
-        tv_fName : str
-            Trained Total Variability matrix file.
         classifier : dict, optional
             G-PLDA model and projection matrix. The default is None.
         opDir : str, optional
@@ -172,22 +172,16 @@ class XVector:
             scores_ = {}
             # true_lab_ = []
             # pred_lab_ = []
-            
-            '''
-            Loading Total Variability matrix
-            '''
-            with open(tv_fName, 'rb') as f_:
-                TV_ = pickle.load(f_)
-                TV_ = TV_['tv_mat']
-            
+                        
             ''' Loading the speaker models '''
             enrolled_speakers_ = next(os.walk(enr_xvec_dir))[1]
             enr_xvectors_ = {}
             for speaker_id_ in enrolled_speakers_:
                 xvec_fName_ = enr_xvec_dir + '/' + speaker_id_ + '/' + speaker_id_ + '.pkl'
                 with open(xvec_fName_, 'rb') as f_:
-                    I_vectors_ = pickle.load(f_)
-                    enr_xvectors_[speaker_id_] = I_vectors_.T
+                    Xvectors_ = pickle.load(f_)
+                    enr_xvectors_[speaker_id_] = Xvectors_.T
+
                                 
             # confusion_matrix_ = np.zeros((len(enrolled_speakers_), len(enrolled_speakers_)))
             # match_count_ = np.zeros(len(enrolled_speakers_))
@@ -229,37 +223,53 @@ class XVector:
                             
                     split_count_ += 1    
                     speaker_id_ = feat_info[split_id_]['speaker_id']
-                    test_xvec_opDir_ = opDir + '/xvectors/' + speaker_id_ + '/'
-                    if not os.path.exists(test_xvec_opDir_):
-                        os.makedirs(test_xvec_opDir_)
+                    # test_xvec_opDir_ = opDir + '/xvectors/' + speaker_id_ + '/'
+                    # if not os.path.exists(test_xvec_opDir_):
+                    #     os.makedirs(test_xvec_opDir_)
                         
-                    test_xvec_fName_ = test_xvec_opDir_ + '/' + split_id_ + '.pkl'
-                    test_xvec_ = np.empty([])
-                    if not os.path.exists(test_xvec_fName_):
-                        feature_path_ = feat_info[split_id_]['file_path']
-                        fv_ = None
-                        del fv_
-                        fv_ = np.load(feature_path_, allow_pickle=True)
-                        # The feature vectors must be stored as individual rows in the 2D array
-                        if dim:
-                            if np.shape(fv_)[0]==dim:
-                                fv_ = fv_.T
-                        elif np.shape(fv_)[1]>np.shape(fv_)[0]:
-                            fv_ = fv_.T
+                    xvec_fName_ = './models/MFCC_x_vector/public_test_cohart_edited/' + speaker_id_ + '/' + speaker_id_ + '.pkl'
+                    with open(xvec_fName_, 'rb') as f_:
+                        test_xvec_ = pickle.load(f_)
+                        
+                    # test_xvec_fName_ = test_xvec_opDir_ + '/' + split_id_ + '.pkl'
+                    # test_xvec_ = np.empty([])
+                    # if not os.path.exists(test_xvec_fName_):
+                    #     feature_path_ = feat_info[split_id_]['file_path']
+                    #     fv_ = None
+                    #     del fv_
+                    #     fv_ = np.load(feature_path_, allow_pickle=True)
+                    #     # The feature vectors must be stored as individual rows in the 2D array
+                    #     if dim:
+                    #         if np.shape(fv_)[0]==dim:
+                    #             fv_ = fv_.T
+                    #     elif np.shape(fv_)[1]>np.shape(fv_)[0]:
+                    #         fv_ = fv_.T
         
-                        ''' Feature Scaling '''
-                        if self.FEATURE_SCALING>0:
-                            fv_ = self.SCALER.transform(fv_)
-                            fv_ = fv_.astype(np.float32)
+                    #     ''' Feature Scaling '''
+                    #     if self.FEATURE_SCALING>0:
+                    #         fv_ = self.SCALER.transform(fv_)
+                    #         fv_ = fv_.astype(np.float32)
                         
-                        test_xvec_ = self.compute_xvector(fv_, TV_)
-                        with open(test_xvec_fName_, 'wb') as xvec_fid_:
-                            pickle.dump(test_xvec_, xvec_fid_, pickle.HIGHEST_PROTOCOL)
-                        # print(f'Test {split_id_} xvector saved')
-                    else:
-                        with open(test_xvec_fName_, 'rb') as xvec_fid_:
-                            test_xvec_ = pickle.load(xvec_fid_)
-                        # print(f'Test {split_id_} xvector loaded')
+                    #     model = X_vector(fv_.shape[1], len(enrolled_speakers_)).to('cpu')
+                    #     PATH = '/DATA/jagabandhu/i-SpeakR_output/I-MSV/models/MFCC_x_vector/save_model/train_best_check_point_19_0.7463340487331152_0.06842262705783253'
+                    #     model.load_state_dict(torch.load(PATH))
+                    #     model.eval()
+
+                    #     print(f'fv_ = {np.shape(fv_)}')
+                    #     import sys
+                    #     sys.exit(0)
+                    #     features = torch.from_numpy(fv_)
+                    #     features.requires_grad = False
+                    #     pred_logits, test_x_vec_ = model(features)
+                    #     # test_xvec_ = self.compute_xvector(fv_, TV_)
+
+                    #     with open(test_xvec_fName_, 'wb') as xvec_fid_:
+                    #         pickle.dump(test_xvec_, xvec_fid_, pickle.HIGHEST_PROTOCOL)
+                    #     # print(f'Test {split_id_} xvector saved')
+                    # else:
+                    #     with open(test_xvec_fName_, 'rb') as xvec_fid_:
+                    #         test_xvec_ = pickle.load(xvec_fid_)
+                    #     # print(f'Test {split_id_} xvector loaded')
 
                     print(f"GPLDA: {classifier['gplda_model'].keys()}")
                     test_xvec_ = classifier['projection_matrix'] @ test_xvec_                    

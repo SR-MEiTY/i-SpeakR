@@ -22,8 +22,6 @@ from utils import writeXvectors
 torch.multiprocessing.set_sharing_strategy('file_system')
 import pandas as pd
 import shutil
-import matplotlib.pyplot as plt
-import sys
 
 
 
@@ -196,7 +194,7 @@ class XvectorComputation:
             numpy_labels = labels.detach().cpu().numpy()
             features.requires_grad = True
             self.optimizer.zero_grad()
-            pred_logits,x_vec = self.model(features)
+            pred_logits, x_vec = self.model(features)
             #################################################
             ############ Writing X Vectors ##################
             if epoch == self.num_epochs - 1:
@@ -255,6 +253,7 @@ class XvectorComputation:
             xvec_feat_path = os.path.join(self.speaker_xvec_path, 'Enr_data')
         else:
             xvec_feat_path = os.path.join(self.speaker_xvec_path, 'public_test_cohart_edited')
+        
         if os.path.exists(xvec_feat_path):
             shutil.rmtree(xvec_feat_path)
         os.mkdir(xvec_feat_path)

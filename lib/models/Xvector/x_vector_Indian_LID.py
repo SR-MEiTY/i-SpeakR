@@ -1,5 +1,6 @@
 
 import torch.nn as nn
+# from lib.models.Xvector.tdnn import TDNN
 from tdnn import TDNN
 import torch
 
@@ -9,10 +10,10 @@ class X_vector(nn.Module):
     def __init__(self, input_dim = 40, num_classes=8):
         super(X_vector, self).__init__()
         self.tdnn1 = TDNN(input_dim=input_dim, output_dim=512, context_size=5, dilation=1,dropout_p=0.5)
-        self.tdnn2 = TDNN(input_dim=512, output_dim=512, context_size=3, dilation=1,dropout_p=0.5)
-        self.tdnn3 = TDNN(input_dim=512, output_dim=512, context_size=2, dilation=2,dropout_p=0.5)
-        self.tdnn4 = TDNN(input_dim=512, output_dim=512, context_size=1, dilation=1,dropout_p=0.5)
-        self.tdnn5 = TDNN(input_dim=512, output_dim=512, context_size=1, dilation=3,dropout_p=0.5)
+        self.tdnn2 = TDNN(input_dim=512, output_dim=512, context_size=3, dilation=1, dropout_p=0.5)
+        self.tdnn3 = TDNN(input_dim=512, output_dim=512, context_size=2, dilation=2, dropout_p=0.5)
+        self.tdnn4 = TDNN(input_dim=512, output_dim=512, context_size=1, dilation=1, dropout_p=0.5)
+        self.tdnn5 = TDNN(input_dim=512, output_dim=512, context_size=1, dilation=3, dropout_p=0.5)
         #### Frame levelPooling
         self.segment6 = nn.Linear(1024, 512)
         self.segment7 = nn.Linear(512, 512)
