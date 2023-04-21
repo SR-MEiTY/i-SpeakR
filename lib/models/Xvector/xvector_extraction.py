@@ -47,37 +47,42 @@ class XvectorComputation:
         self.num_epochs = num_epochs
         self.feat_path = feat_path
         self.speaker_xvec_path = speaker_xvec_path
+        
+        # self.dev_fName = 'Dev_data'
+        # self.enr_fName = 'Enr_data'
+        # self.test_fName = 'public_test_cohart_edited'
 
+        self.dev_fName = 'DEV'
+        self.enr_fName = 'ENR'
+        self.test_fName = 'TEST'
 
         all_speakers_dev = {'count': 0}
-        self.dev_filepath = self.feat_path + '/Dev_data.txt'
+        self.dev_filepath = self.feat_path + '/' + self.dev_fName + '.txt'
         with open(self.dev_filepath, 'w+') as fid:
             fid.write('')
-        files = next(os.walk(self.feat_path+'/Dev_data/'))[2]
+        files = next(os.walk(self.feat_path+'/' + self.dev_fName + '/'))[2]
         for fl in files:
             speaker_id = fl.split('.')[0].split('_')[0]
             if not speaker_id in all_speakers_dev.keys():
                 all_speakers_dev[speaker_id] = str(all_speakers_dev['count'])
                 all_speakers_dev['count'] += 1
             with open(self.dev_filepath, 'a+') as fid:
-                fid.write(self.feat_path+'/Dev_data/'+fl+' '+all_speakers_dev[speaker_id]+'\n')
+                fid.write(self.feat_path+'/' + self.dev_fName + '/'+fl+' '+all_speakers_dev[speaker_id]+'\n')
 
-        
         all_speakers_training = {'count': 0}
-        self.training_filepath = self.feat_path + '/Enr_data.txt'
+        self.training_filepath = self.feat_path + '/' + self.enr_fName + '.txt'
         with open(self.training_filepath, 'w+') as fid:
             fid.write('')
-        files = next(os.walk(self.feat_path+'/Enr_data/'))[2]
+        files = next(os.walk(self.feat_path+'/' + self.enr_fName + '/'))[2]
         for fl in files:
             speaker_id = fl.split('.')[0].split('_')[0]
             if not speaker_id in all_speakers_training.keys():
                 all_speakers_training[speaker_id] = str(all_speakers_training['count'])
                 all_speakers_training['count'] += 1
             with open(self.training_filepath, 'a+') as fid:
-                fid.write(self.feat_path+'/Enr_data/'+fl+' '+all_speakers_training[speaker_id]+'\n')
+                fid.write(self.feat_path+'/' + self.enr_fName + '/'+fl+' '+all_speakers_training[speaker_id]+'\n')
 
-        
-        self.testing_csv = self.feat_path + '../../data_info/public_test_cohart_edited.csv'
+        self.testing_csv = self.feat_path + '../../data_info/' + self.test_fName + '.csv'
         test_annotations = {}
         import csv
         with open(self.testing_csv, 'r') as csv_fid:
@@ -85,10 +90,10 @@ class XvectorComputation:
             for row in reader:
                 test_annotations[row['split_id']] = {'speaker_id':row['speaker_id'], 'cohorts':row['cohorts']}
                 
-        self.testing_filepath = self.feat_path + '/public_test_cohart_edited.txt'
+        self.testing_filepath = self.feat_path + '/' + self.test_fName + '.txt'
         with open(self.testing_filepath, 'w+') as fid:
             fid.write('')
-        files = next(os.walk(self.feat_path+'/public_test_cohart_edited/'))[2]
+        files = next(os.walk(self.feat_path+'/' + self.test_fName + '/'))[2]
         # files = next(os.walk(self.feat_path+'/private_test_cohort_final/'))[2]
         for fl in files:
             speaker_count = 0
@@ -96,7 +101,7 @@ class XvectorComputation:
                 speaker_id = test_annotations[fl.split('.')[0]]['speaker_id']
                 speaker_count = all_speakers_training[speaker_id]
             with open(self.testing_filepath, 'a+') as fid:
-                fid.write(self.feat_path+'/public_test_cohart_edited/'+fl+' '+str(speaker_count)+'\n')
+                fid.write(self.feat_path+'/' + self.test_fName + '/'+fl+' '+str(speaker_count)+'\n')
         
 
         ### Data related
@@ -157,7 +162,7 @@ class XvectorComputation:
         if os.path.exists(self.speaker_xvec_path) == False:
             os.mkdir(self.speaker_xvec_path)
     
-        xvec_feat_path = os.path.join(self.speaker_xvec_path, 'Dev_data')
+        xvec_feat_path = os.path.join(self.speaker_xvec_path, self.dev_fName)
         if os.path.exists(xvec_feat_path):
             shutil.rmtree(xvec_feat_path)
         os.mkdir(xvec_feat_path)
@@ -221,9 +226,9 @@ class XvectorComputation:
         mean_acc = accuracy_score(full_gts,full_preds)
         mean_loss = np.mean(np.asarray(train_loss_list))
         #print("Training xvector ", x_vec.detach().numpy())
-        path = os.path.join(self.speaker_xvec_path, 'Dev_data_xvector.npy')
+        path = os.path.join(self.speaker_xvec_path, self.dev_fName + '_xvector.npy')
         np.save(path, x_vec.cpu().detach().numpy())
-        df.to_csv(os.path.join(xvec_feat_path, 'Dev_data_xvector.csv'), encoding='utf-8')
+        df.to_csv(os.path.join(xvec_feat_path, self.dev_fName + '_xvector.csv'), encoding='utf-8')
         print('Total training loss {} and training Accuracy {} after {} epochs'.format(mean_loss,mean_acc,epoch))
         rand = np.random.rand()
         model_save_path = os.path.join(self.speaker_xvec_path, 'save_model')
@@ -248,11 +253,11 @@ class XvectorComputation:
         xvec_feat_path = ""
         df = pd.DataFrame(columns=['x_vec_path', 'label'])
         if mode == 'dev':
-            xvec_feat_path = os.path.join(self.speaker_xvec_path, 'Dev_data')
+            xvec_feat_path = os.path.join(self.speaker_xvec_path, self.dev_fName)
         elif mode == 'train':
-            xvec_feat_path = os.path.join(self.speaker_xvec_path, 'Enr_data')
+            xvec_feat_path = os.path.join(self.speaker_xvec_path, self.enr_fName)
         else:
-            xvec_feat_path = os.path.join(self.speaker_xvec_path, 'public_test_cohart_edited')
+            xvec_feat_path = os.path.join(self.speaker_xvec_path, self.test_fName)
         
         if os.path.exists(xvec_feat_path):
             shutil.rmtree(xvec_feat_path)
@@ -308,11 +313,11 @@ class XvectorComputation:
             mean_loss = np.mean(np.asarray(val_loss_list))
             #print("Training xvector ", x_vec.detach().numpy())
             if mode == 'dev':
-                path = os.path.join(self.speaker_xvec_path, 'Dev_data_xvector.npy')
+                path = os.path.join(self.speaker_xvec_path, self.dev_fName + '_xvector.npy')
             elif mode == 'test':
-                path = os.path.join(self.speaker_xvec_path, 'public_test_cohart_edited_xvector.npy')
+                path = os.path.join(self.speaker_xvec_path, self.dev_fName + '_xvector.npy')
             else:
-                path = os.path.join(self.speaker_xvec_path, 'Enr_data_xvector.npy')
+                path = os.path.join(self.speaker_xvec_path, self.dev_fName + '_xvector.npy')
             np.save(path, x_vec.cpu().detach().numpy())
             df.to_csv(os.path.join(xvec_feat_path, 'train_xvect_feat.csv'), encoding='utf-8')
             print('Total validation loss {} and Validation accuracy {} after'.format(mean_loss,mean_acc))
@@ -327,14 +332,14 @@ if __name__ == '__main__':
     win_length = 78
     n_fft = 78
     batch_size = 10
-    use_gpu = True
+    use_gpu = False
     num_epochs = 20
     
-    # feat_path = '/home/mrinmoy/Documents/Professional/Senior_Project_Engineer_IIT_Dharwad_IndicASV/Toolkit/i-SpeakR_output/Test_Dataset/features/MFCC/'
-    # speaker_xvec_path = '/home/mrinmoy/Documents/Professional/Senior_Project_Engineer_IIT_Dharwad_IndicASV/Toolkit/i-SpeakR_output/Test_Dataset/TEST_Xvector/xvectors/'
+    feat_path = '/home/mrinmoy/Documents/Professional/Senior_Project_Engineer_IIT_Dharwad_IndicASV/Toolkit/i-SpeakR_output/Test_Dataset/features/MFCC/'
+    speaker_xvec_path = '/home/mrinmoy/Documents/Professional/Senior_Project_Engineer_IIT_Dharwad_IndicASV/Toolkit/i-SpeakR_output/Test_Dataset/models/MFCC_x_vector/'
 
-    feat_path = '/DATA/jagabandhu/i-SpeakR_output/I-MSV/features/MFCC/'
-    speaker_xvec_path = '/DATA/jagabandhu/i-SpeakR_output/I-MSV/models/MFCC_x_vector/'
+    # feat_path = '/DATA/jagabandhu/i-SpeakR_output/I-MSV/features/MFCC/'
+    # speaker_xvec_path = '/DATA/jagabandhu/i-SpeakR_output/I-MSV/models/MFCC_x_vector/'
     
     xvec = XvectorComputation(input_dim, num_classes, win_length, n_fft, batch_size, use_gpu, num_epochs, feat_path, speaker_xvec_path)
     xvec.compute_xvectors()
