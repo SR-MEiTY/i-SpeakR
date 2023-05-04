@@ -85,33 +85,6 @@ class XVector:
 
 
     
-    
-    # def save_features_required_format(self, dev_xvec_dir_, dev_xvec_dir_new_):
-    #     subdirs = next(os.walk(dev_xvec_dir_))[1]
-    #     # print(f'subdirs={subdirs}')
-    #     for dir_i in subdirs:
-    #         # print(f'dir_i={dir_i}')
-    #         files = next(os.walk(dev_xvec_dir_+'/'+dir_i))[2]
-    #         # files = librosa.util.find_files(dev_xvec_dir_+'/'+dir_i, ext=['npy'])
-    #         # print(f'files={files}')
-    #         X_vectors_ = np.empty([])
-    #         speaker_id_ = ''
-    #         for fl in files:
-    #             speaker_id_ = fl.split('_')[0]
-    #             fName = dev_xvec_dir_ + '/' + dir_i + '/' + fl #.split('/')[-1]
-    #             # print(f'fName={fName}')
-    #             xvec_temp_ = np.load(fName)
-    #             if np.size(X_vectors_)<=1:
-    #                 X_vectors_ = np.array(xvec_temp_, ndmin=2)
-    #             else:
-    #                 X_vectors_ = np.append(X_vectors_, np.array(xvec_temp_, ndmin=2), axis=0)
-    #         print(f'speaker_id={dir_i} X_vectors_={X_vectors_.shape}')
-    #         os.makedirs(dev_xvec_dir_new_+'/'+speaker_id_)
-    #         xvec_fName_ = dev_xvec_dir_new_ + '/' + speaker_id_+ '/' + speaker_id_ + '.pkl'
-    #         with open(xvec_fName_, 'wb') as f_:
-    #             pickle.dump(X_vectors_, f_, pickle.HIGHEST_PROTOCOL)
-        
-    
 
     def cosine_kernal_scoring_on_spkr_factors(self, trn_y, tst_y):
         M_ =  trn_y
