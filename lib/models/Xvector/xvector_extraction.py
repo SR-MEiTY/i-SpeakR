@@ -11,21 +11,22 @@ Created on Thu March 23 2023
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
-from XvecSpeechGenerator import XvecSpeechGenerator
+from lib.models.Xvector.XvecSpeechGenerator import XvecSpeechGenerator
+from lib.models.Xvector.x_vector_Indian_LID import X_vector
+from lib.models.Xvector.utils import speech_collate
+from lib.models.Xvector.utils import writeXvectors
 import torch.nn as nn
 import os
 from torch import optim
-from x_vector_Indian_LID import X_vector
 from sklearn.metrics import accuracy_score
-from utils import speech_collate
-from utils import writeXvectors
 torch.multiprocessing.set_sharing_strategy('file_system')
 import pandas as pd
 import shutil
+import pickle
 
 
 
-class XvectorComputation:
+class XvectorTraining:
     trainloss = []
     train_acc = []
     dataloader_dev = None
@@ -48,18 +49,19 @@ class XvectorComputation:
         self.feat_path = feat_path
         self.speaker_xvec_path = speaker_xvec_path
         
-        # self.dev_fName = 'Dev_data'
-        # self.enr_fName = 'Enr_data'
-        # self.test_fName = 'public_test_cohart_edited'
+        self.dev_fName = 'Dev_data'
+        self.enr_fName = 'Enr_data'
+        self.test_fName = 'public_test_cohart_edited'
 
-        self.dev_fName = 'DEV'
-        self.enr_fName = 'ENR'
-        self.test_fName = 'TEST'
+        # self.dev_fName = 'DEV'
+        # self.enr_fName = 'ENR'
+        # self.test_fName = 'TEST'
 
         all_speakers_dev = {'count': 0}
         self.dev_filepath = self.feat_path + '/' + self.dev_fName + '.txt'
         with open(self.dev_filepath, 'w+') as fid:
             fid.write('')
+        print(f"Path={self.feat_path+'/' + self.dev_fName + '/'}")
         files = next(os.walk(self.feat_path+'/' + self.dev_fName + '/'))[2]
         for fl in files:
             speaker_id = fl.split('.')[0].split('_')[0]
@@ -133,23 +135,29 @@ class XvectorComputation:
         self.loss_fun = nn.CrossEntropyLoss()
     
     
-    def compute_xvectors(self):
+    def train_tdnn(self):
         for epoch_i in range(self.num_epochs):
-            loss, acc = self.train(self.dataloader_dev, epoch_i)
+            # loss, acc = self.train(self.dataloader_dev, epoch_i)
+            loss, acc = self.train(epoch_i)
             self.trainloss.append(loss)
             self.train_acc.append(acc)
-            self.validation(self.dataloader_train, epoch_i, 'train')
-            self.validation(self.dataloader_test, epoch_i, 'test')
+            # self.validation(self.dataloader_train, epoch_i, 'train')
+            self.validation(epoch_i, 'train')
+            # self.validation(self.dataloader_test, epoch_i, 'test')
+            # self.validation(epoch_i, 'test')
             # plt.plot(trainloss)
         # plt.show()
         
-        self.validation(self.dataloader_dev, self.num_epochs, 'dev')
-        self.validation(self.dataloader_train, self.num_epochs, 'train')
-        self.validation(self.dataloader_test, self.num_epochs, 'test')
+        # self.validation(self.dataloader_dev, self.num_epochs, 'dev')
+        # self.validation(self.dataloader_train, self.num_epochs, 'train')
+        # self.validation(self.dataloader_test, self.num_epochs, 'test')
+        self.validation(self.num_epochs, 'dev')
+        self.validation(self.num_epochs, 'train')
+        # self.validation(self.num_epochs, 'test')
         
     
         
-    def train(self, vdataloader_train, epoch):
+    def train(self, epoch):
         train_loss_list=[]
         full_preds=[]
         full_gts=[]
@@ -231,17 +239,21 @@ class XvectorComputation:
         df.to_csv(os.path.join(xvec_feat_path, self.dev_fName + '_xvector.csv'), encoding='utf-8')
         print('Total training loss {} and training Accuracy {} after {} epochs'.format(mean_loss,mean_acc,epoch))
         rand = np.random.rand()
-        model_save_path = os.path.join(self.speaker_xvec_path, 'save_model')
+        model_save_path = os.path.join(self.speaker_xvec_path, 'model_checkpoints')
         if not os.path.exists(model_save_path):
             os.makedirs(model_save_path)
-        path = os.path.join(model_save_path, 'train_best_check_point_' + str(epoch) + '_' + str(mean_loss) + '_' + str(rand))
+        
         state_dict = {'model': self.model.state_dict(), 'optimizer': self.optimizer.state_dict(), 'epoch': epoch}
-        torch.save(self.model.state_dict(), path)
+        torch.save(self.model.state_dict(), os.path.join(model_save_path, 'train_best_check_point_' + str(epoch) + '_' + str(mean_loss) + '_' + str(rand)))
+        torch.save(self.model.state_dict(), os.path.join(self.speaker_xvec_path, 'xvector_model'))
+        with open(os.path.join(self.speaker_xvec_path, 'xvector_model_statedict.pkl'), 'wb') as fid_sd_:
+            pickle.dump(state_dict, fid_sd_, pickle.HIGHEST_PROTOCOL)
+
         return (mean_loss, mean_acc)
     
     
     
-    def validation(self, dataloader_val, epoch, mode):
+    def validation(self, epoch, mode):
         #model1 = torch.load("C:\\Users\\Talib\\Downloads\\talib\\talib\\X-vector_codes\\save_model\\best_check_point_1_1.395266056060791_0.761649240146505")
         model = X_vector(self.input_dim, self.num_classes).to(self.device)
         #model.state_dict(torch.load("/home/fathima/Desktop/x_py/x_vector-25-10/save_model/train_best_check_point_2_0.6299841274817785_0.6732803042366898"))
@@ -254,10 +266,13 @@ class XvectorComputation:
         df = pd.DataFrame(columns=['x_vec_path', 'label'])
         if mode == 'dev':
             xvec_feat_path = os.path.join(self.speaker_xvec_path, self.dev_fName)
+            dataloader = self.dataloader_dev
         elif mode == 'train':
             xvec_feat_path = os.path.join(self.speaker_xvec_path, self.enr_fName)
+            dataloader = self.dataloader_train
         else:
             xvec_feat_path = os.path.join(self.speaker_xvec_path, self.test_fName)
+            dataloader = self.dataloader_test
         
         if os.path.exists(xvec_feat_path):
             shutil.rmtree(xvec_feat_path)
@@ -267,7 +282,7 @@ class XvectorComputation:
             val_loss_list=[]
             full_preds=[]
             full_gts=[]
-            for i_batch, sample_batched in enumerate(dataloader_val):
+            for i_batch, sample_batched in enumerate(dataloader):
                 feat = np.empty([])
                 for torch_tensor in sample_batched[0]:
                     # print(np.shape(torch_tensor))
@@ -332,17 +347,17 @@ if __name__ == '__main__':
     win_length = 78
     n_fft = 78
     batch_size = 10
-    use_gpu = False
+    use_gpu = True
     num_epochs = 20
     
-    feat_path = '/home/mrinmoy/Documents/Professional/Senior_Project_Engineer_IIT_Dharwad_IndicASV/Toolkit/i-SpeakR_output/Test_Dataset/features/MFCC/'
-    speaker_xvec_path = '/home/mrinmoy/Documents/Professional/Senior_Project_Engineer_IIT_Dharwad_IndicASV/Toolkit/i-SpeakR_output/Test_Dataset/models/MFCC_x_vector/'
+    # feat_path = '/home/mrinmoy/Documents/Professional/Senior_Project_Engineer_IIT_Dharwad_IndicASV/Toolkit/i-SpeakR_output/Test_Dataset/features/MFCC/'
+    # speaker_xvec_path = '/home/mrinmoy/Documents/Professional/Senior_Project_Engineer_IIT_Dharwad_IndicASV/Toolkit/i-SpeakR_output/Test_Dataset/models/MFCC_x_vector/'
 
-    # feat_path = '/DATA/jagabandhu/i-SpeakR_output/I-MSV/features/MFCC/'
-    # speaker_xvec_path = '/DATA/jagabandhu/i-SpeakR_output/I-MSV/models/MFCC_x_vector/'
+    feat_path = '/DATA/jagabandhu/i-SpeakR_output/I-MSV/features/MFCC/'
+    speaker_xvec_path = '/DATA/jagabandhu/i-SpeakR_output/I-MSV/models/MFCC_x_vector/'
     
-    xvec = XvectorComputation(input_dim, num_classes, win_length, n_fft, batch_size, use_gpu, num_epochs, feat_path, speaker_xvec_path)
-    xvec.compute_xvectors()
+    xvec = XvectorTraining(input_dim, num_classes, win_length, n_fft, batch_size, use_gpu, num_epochs, feat_path, speaker_xvec_path)
+    xvec.train_tdnn()
    
 
     

@@ -12,6 +12,7 @@ from lib.feature_computation.load_features import LoadFeatures
 from lib.models.GMM_UBM.gaussian_background import GaussianBackground
 from lib.models.IVector.ivector_extraction import IVector
 from lib.models.Xvector.xvector_stub import XVector
+from lib.models.Xvector.xvector_extraction import XvectorTraining
 from lib.metrics.performance_metrics import PerformanceMetrics
 import os
 import pickle
@@ -25,6 +26,18 @@ import json
 X-Vector :: Speaker Verification System
 '''
 def xvector_sv(PARAMS, feat_info_):
+
+    input_dim = 39
+    num_classes = 50
+    win_length = 78
+    n_fft = 78
+    batch_size = 10
+    use_gpu = True
+    num_epochs = 50
+    
+    XvectorTraining(input_dim, num_classes, win_length, n_fft, batch_size, use_gpu, num_epochs, PARAMS['feat_dir'], PARAMS['model_dir']).train_tdnn()
+
+
     XVec_ = XVector(
         model_dir=PARAMS['model_dir'], 
         opDir=PARAMS['output_dir'],
@@ -32,26 +45,50 @@ def xvector_sv(PARAMS, feat_info_):
         feat_scaling=int(PARAMS['feature_scaling']),
         )
     
+    xvector_opDir_ = PARAMS['output_dir'] + '/results/x_vector/'
+    if not os.path.exists(xvector_opDir_):
+        os.makedirs(xvector_opDir_)
+        
+    dev_key_ = PARAMS['dev_key'].split('/')[-1].split('.')[0]
+    # dev_xvec_dir_ = xvector_opDir_ + '/' + dev_key_ + '/'
+    if not os.path.exists(xvector_opDir_+'/'+dev_key_+'_xvectors.pkl'):
+        print('\n\nComputing development X-Vectors:')
+        XVEC_dev_ = XVec_.compute_x_vectors(PARAMS['feat_dir'], PARAMS['model_dir'], xvector_opDir_, dev_key_)
+        with open(xvector_opDir_+'/'+dev_key_+'_xvectors.pkl', 'wb') as dev_fid_:
+            pickle.dump(XVEC_dev_, dev_fid_, pickle.HIGHEST_PROTOCOL)
+    else:
+        with open(xvector_opDir_+'/'+dev_key_+'_xvectors.pkl', 'rb') as dev_fid_:
+            XVEC_dev_ = pickle.load(dev_fid_)
+
+    enr_key_ = PARAMS['enr_key'].split('/')[-1].split('.')[0]
+    # enr_xvec_dir_ = xvector_opDir_ + '/' + enr_key_ + '/'
+    if not os.path.exists(xvector_opDir_+'/'+enr_key_+'_xvectors.pkl'):
+        print('\n\nComputing enrollment X-Vectors:')
+        XVEC_enr_ = XVec_.compute_x_vectors(PARAMS['feat_dir'], PARAMS['model_dir'], xvector_opDir_, enr_key_)
+        with open(xvector_opDir_+'/'+enr_key_+'_xvectors.pkl', 'wb') as enr_fid_:
+            pickle.dump(XVEC_enr_, enr_fid_, pickle.HIGHEST_PROTOCOL)
+    else:
+        with open(xvector_opDir_+'/'+enr_key_+'_xvectors.pkl', 'rb') as enr_fid_:
+            XVEC_enr_ = pickle.load(enr_fid_)
+
+    test_key_ = PARAMS['test_key'].split('/')[-1].split('.')[0]
+    # test_xvec_dir_ = xvector_opDir_ + '/' + test_key_ + '/'
+    if not os.path.exists(xvector_opDir_+'/'+test_key_+'_xvectors.pkl'):
+        print('\n\nComputing test X-Vectors:')
+        XVEC_test_ = XVec_.compute_x_vectors(PARAMS['feat_dir'], PARAMS['model_dir'], xvector_opDir_, test_key_, test=True)
+        with open(xvector_opDir_+'/'+test_key_+'_xvectors.pkl', 'wb') as test_fid_:
+            pickle.dump(XVEC_test_, test_fid_, pickle.HIGHEST_PROTOCOL)
+    else:
+        with open(xvector_opDir_+'/'+test_key_+'_xvectors.pkl', 'rb') as test_fid_:
+            XVEC_test_ = pickle.load(test_fid_)
 
 
     '''
     G-PLDA Training
     '''
     gplda_fName_ = PARAMS['model_dir'] + '/G_PLDA.pkl'
-    if not os.path.exists(gplda_fName_):
-        FV_dev_, ram_mem_req_ = LoadFeatures(
-            info=feat_info_[PARAMS['dev_set']], 
-            feature_name=PARAMS['feature_name']
-            ).load(dim=int(PARAMS['num_dim']))
-        dev_xvec_dir_ = PARAMS['model_dir'] + '/' + PARAMS['dev_key'].split('/')[-1].split('.')[0] + '/'
-        print(f'dev_xvec_dir_={dev_xvec_dir_}')
-        
-        dev_xvec_dir_new_ = PARAMS['model_dir'] + '/' + PARAMS['dev_key'].split('/')[-1].split('.')[0] + '_new/'
-        if not os.path.exists(dev_xvec_dir_new_):
-            XVec_.save_features_required_format(dev_xvec_dir_, dev_xvec_dir_new_)
-
-
-        gplda_model_, projection_matrix_ = XVec_.plda_training(FV_dev_, dev_xvec_dir_new_, lda_dim=20, LDA=True, WCCN=True)
+    if not os.path.exists(gplda_fName_):        
+        gplda_model_, projection_matrix_ = XVec_.plda_training(XVEC_enr_, lda_dim=20, LDA=True, WCCN=True)
         gplda_classifier_ = {'gplda_model':gplda_model_, 'projection_matrix': projection_matrix_}
         with open(gplda_fName_, 'wb') as fid_:
             pickle.dump(gplda_classifier_, fid_, pickle.HIGHEST_PROTOCOL)
@@ -61,16 +98,12 @@ def xvector_sv(PARAMS, feat_info_):
             gplda_classifier_ = pickle.load(fid_)
 
 
-    enr_xvec_dir_ = PARAMS['model_dir'] + '/' + PARAMS['enr_key'].split('/')[-1].split('.')[0] + '/'
-    enr_xvec_dir_new_ = PARAMS['model_dir'] + '/' + PARAMS['dev_key'].split('/')[-1].split('.')[0] + '_new/'
-    if not os.path.exists(enr_xvec_dir_new_):
-        XVec_.save_features_required_format(enr_xvec_dir_, enr_xvec_dir_new_)
 
     ''' 
     Testing the trained models 
     '''
     print('Testing the trained models')
-    test_opDir_ = PARAMS['output_dir'] + '/' + PARAMS['test_key'].split('/')[-1].split('.')[0] + '_' + PARAMS['model_type'] + '/'
+    test_opDir_ = xvector_opDir_ + '/Performance_' + PARAMS['test_key'].split('/')[-1].split('.')[0] + '/'
     if not os.path.exists(test_opDir_):
         os.makedirs(test_opDir_)
     FPR_ = {}
@@ -83,7 +116,8 @@ def xvector_sv(PARAMS, feat_info_):
             Utterance-wise testing
             '''
             scores_ = XVec_.perform_testing(
-                enr_xvec_dir_new_, 
+                XVEC_enr_,
+                XVEC_test_,
                 classifier=gplda_classifier_,
                 opDir=test_opDir_,
                 feat_info=feat_info_[PARAMS['test_set']], 
@@ -107,8 +141,6 @@ def xvector_sv(PARAMS, feat_info_):
             
     roc_opFile_ = test_opDir_ + '/ROC.png'
     PerformanceMetrics().plot_roc(FPR_, TPR_, roc_opFile_)
-
-
 
 
 

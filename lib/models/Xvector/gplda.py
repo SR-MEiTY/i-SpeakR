@@ -13,18 +13,18 @@ import time
 import sys
 
 
-def LDA_computation(ivector_per_speaker, ivectors_combined, ivec_dim, num_eigen_vectors):
+def LDA_computation(xvector_per_speaker, xvectors_combined, ivec_dim, num_eigen_vectors):
     # % w is a cell consisting of class number of matrixes, and each matrix consists
-    # % of ivectors of [dim x no. of vectors ]
-    # ivec_dim: ivector dimension
+    # % of xvectors of [dim x no. of vectors ]
+    # ivec_dim: xvector dimension
     # num_eigen_vectors: LDA dimensions
     
     # projection_matrix_ = np.eye(ivec_dim)
     Sw_ = np.zeros((ivec_dim,ivec_dim))
     Sb_ = np.zeros((ivec_dim,ivec_dim))
-    wbar_ = np.mean(ivectors_combined, axis=1)
-    for speaker_id_ in ivector_per_speaker.keys():
-        ws_ = ivector_per_speaker[speaker_id_]
+    wbar_ = np.mean(xvectors_combined, axis=1)
+    for speaker_id_ in xvector_per_speaker.keys():
+        ws_ = xvector_per_speaker[speaker_id_]
         wsbar_ = np.mean(ws_, axis=1)
         Sb_ = np.add(Sb_, np.subtract(wsbar_, wbar_) @ np.subtract(wsbar_, wbar_).T)
         Sw_ = np.add(Sw_, np.cov(ws_, bias=True))
@@ -40,19 +40,19 @@ def LDA_computation(ivector_per_speaker, ivectors_combined, ivec_dim, num_eigen_
 
 
 
-def WCCN_computation(ivector_per_speaker, projection_dim):
+def WCCN_computation(xvector_per_speaker, projection_dim):
     # % w is a cell consisting of class number of matrixes, and each matrix consists
-    # % of ivectors of [dim x no. of vectors ]  
+    # % of xvectors of [dim x no. of vectors ]  
     
     # projection_matrix_ = np.eye(ivec_dim)
     alpha_ = 0.9
     
     W_ = np.zeros((projection_dim, projection_dim))
-    for speaker_id_ in ivector_per_speaker.keys():
-        ws_ = ivector_per_speaker[speaker_id_]
+    for speaker_id_ in xvector_per_speaker.keys():
+        ws_ = xvector_per_speaker[speaker_id_]
         W_ = np.add(W_, np.cov(ws_, bias=True))
     
-    W_ = np.divide(W_, len(ivector_per_speaker))
+    W_ = np.divide(W_, len(xvector_per_speaker))
     W_ = (1 - alpha_)*W_ + alpha_*np.eye(projection_dim)
     B_ = np.linalg.cholesky(np.linalg.pinv(W_))
 
@@ -63,28 +63,28 @@ def WCCN_computation(ivector_per_speaker, projection_dim):
 
 
 
-def GPLDA_computation(ivector_per_speaker, num_eigen_vectors=20, perform_LDA=False, perform_WCCN=False, num_iter=50):
-    # % ivectorPerSpeaker is a dict consisting speaker wise i-vectors, 
-    # % and each matrix consists of ivectors of [dim x no. of vectors ]
+def GPLDA_computation(xvector_per_speaker, num_eigen_vectors=20, perform_LDA=False, perform_WCCN=False, num_iter=50):
+    # % xvectorPerSpeaker is a dict consisting speaker wise i-vectors, 
+    # % and each matrix consists of xvectors of [dim x no. of vectors ]
     # % if performLDA is false, pass lda_dim as some dommy value, it will never
     # % be used, else provide appropriate dimension
     
-    w_ = ivector_per_speaker.copy()
+    w_ = xvector_per_speaker.copy()
     ivec_dim_ = np.shape(w_[list(w_.keys())[0]])[0]
     print(f'ivec_dim_={ivec_dim_}')
     
     utterance_per_speaker_ = {}
-    ivectors_train_ = np.empty([], dtype=np.float32)
+    xvectors_train_ = np.empty([], dtype=np.float32)
     for speaker_id_ in w_.keys():
         utterance_per_speaker_[speaker_id_] = {}
-        if np.size(ivectors_train_)<=1:
+        if np.size(xvectors_train_)<=1:
             utterance_per_speaker_[speaker_id_]['start'] = 0
-            ivectors_train_ = w_[speaker_id_]
-            utterance_per_speaker_[speaker_id_]['end'] = np.shape(ivectors_train_)[1]
+            xvectors_train_ = w_[speaker_id_]
+            utterance_per_speaker_[speaker_id_]['end'] = np.shape(xvectors_train_)[1]
         else:
-            utterance_per_speaker_[speaker_id_]['start'] = np.shape(ivectors_train_)[1]
-            ivectors_train_ = np.append(ivectors_train_, w_[speaker_id_], axis=1)
-            utterance_per_speaker_[speaker_id_]['end'] = np.shape(ivectors_train_)[1]
+            utterance_per_speaker_[speaker_id_]['start'] = np.shape(xvectors_train_)[1]
+            xvectors_train_ = np.append(xvectors_train_, w_[speaker_id_], axis=1)
+            utterance_per_speaker_[speaker_id_]['end'] = np.shape(xvectors_train_)[1]
     
     
     '''~~~~~~~~~~~~~~~~~~ LDA Computation ~~~~~~~~~~~~~~~~~ '''
@@ -92,10 +92,10 @@ def GPLDA_computation(ivector_per_speaker, num_eigen_vectors=20, perform_LDA=Fal
     print(f'projection_matrix_={np.shape(projection_matrix_)}')
     if perform_LDA:
         startTime = time.process_time()
-        A_ = LDA_computation(w_, ivectors_train_, ivec_dim_, num_eigen_vectors)
-        ivectors_train_ = A_ @ ivectors_train_
+        A_ = LDA_computation(w_, xvectors_train_, ivec_dim_, num_eigen_vectors)
+        xvectors_train_ = A_ @ xvectors_train_
         for speaker_id_ in w_.keys():
-            w_[speaker_id_] = ivectors_train_[:, utterance_per_speaker_[speaker_id_]['start']:utterance_per_speaker_[speaker_id_]['end']].copy()
+            w_[speaker_id_] = xvectors_train_[:, utterance_per_speaker_[speaker_id_]['start']:utterance_per_speaker_[speaker_id_]['end']].copy()
         projection_matrix_ = A_ @ projection_matrix_
         print(f"LDA projection matrix calculated {np.round(time.process_time()-startTime,2)} seconds). projection_matrix_={np.shape(projection_matrix_)}")
 
@@ -116,41 +116,41 @@ def GPLDA_computation(ivector_per_speaker, num_eigen_vectors=20, perform_LDA=Fal
     
     
     # Applying the projection matrix to the train set
-    ivectors_ = {}
+    xvectors_ = {}
     for speaker_id_ in w_.keys():
-        ivectors_[speaker_id_] = projection_matrix_ @ ivector_per_speaker[speaker_id_]
-        print(f'Projected i-vectors: {speaker_id_} {ivectors_[speaker_id_].shape}')
+        xvectors_[speaker_id_] = projection_matrix_ @ xvector_per_speaker[speaker_id_]
+        print(f'Projected i-vectors: {speaker_id_} {xvectors_[speaker_id_].shape}')
 
 
-    num_eigen_voices_ = num_eigen_vectors # len(ivectors_) # check what is eigen voice may be 2
-    K_ = len(ivectors_) # number of speakers
-    D_ = ivectors_[next(iter(ivectors_))].shape[0] # ivec_dim_ # ivector dimension
+    num_eigen_voices_ = num_eigen_vectors # len(xvectors_) # check what is eigen voice may be 2
+    K_ = len(xvectors_) # number of speakers
+    D_ = xvectors_[next(iter(xvectors_))].shape[0] # ivec_dim_ # xvector dimension
 
     print(f'num_eigen_voices_={num_eigen_voices_}')
     print(f'number of speakers K_={K_}')
-    print(f'ivector dimension D_={D_}')
+    print(f'xvector dimension D_={D_}')
     
-    ivectors_all_ = np.empty([], dtype=np.float32)
+    xvectors_all_ = np.empty([], dtype=np.float32)
     utterance_per_speaker_ = {}
-    for speaker_id_ in ivectors_.keys():
+    for speaker_id_ in xvectors_.keys():
         utterance_per_speaker_[speaker_id_] = {}
-        if np.size(ivectors_all_)<=1:
+        if np.size(xvectors_all_)<=1:
             utterance_per_speaker_[speaker_id_]['start'] = 0
-            ivectors_all_ = ivectors_[speaker_id_]
-            utterance_per_speaker_[speaker_id_]['end'] = np.shape(ivectors_all_)[1]
+            xvectors_all_ = xvectors_[speaker_id_]
+            utterance_per_speaker_[speaker_id_]['end'] = np.shape(xvectors_all_)[1]
         else:
-            utterance_per_speaker_[speaker_id_]['start'] = np.shape(ivectors_all_)[1]
-            ivectors_all_ = np.append(ivectors_all_, ivectors_[speaker_id_], axis=1)
-            utterance_per_speaker_[speaker_id_]['end'] = np.shape(ivectors_all_)[1]
+            utterance_per_speaker_[speaker_id_]['start'] = np.shape(xvectors_all_)[1]
+            xvectors_all_ = np.append(xvectors_all_, xvectors_[speaker_id_], axis=1)
+            utterance_per_speaker_[speaker_id_]['end'] = np.shape(xvectors_all_)[1]
             
-    N_ = np.shape(ivectors_all_)[1] # Number of ivectors
-    mu_ = np.mean(ivectors_all_, axis=1) # Mean ivectors
-    mu_repeat_ = np.repeat(np.array(mu_, ndmin=2).T, np.shape(ivectors_all_)[1], axis=1)
-    ivectors_all_ = np.subtract(ivectors_all_, mu_repeat_)
+    N_ = np.shape(xvectors_all_)[1] # Number of xvectors
+    mu_ = np.mean(xvectors_all_, axis=1) # Mean xvectors
+    mu_repeat_ = np.repeat(np.array(mu_, ndmin=2).T, np.shape(xvectors_all_)[1], axis=1)
+    xvectors_all_ = np.subtract(xvectors_all_, mu_repeat_)
 
-    print(f'Total ivector matrix={np.shape(ivectors_all_)}')
-    print(f'Total Number of ivectors N_={N_}')
-    print(f'Total ivectors Mean mu_={np.shape(mu_)} mu_repeat_={np.shape(mu_repeat_)}')
+    print(f'Total xvector matrix={np.shape(xvectors_all_)}')
+    print(f'Total Number of xvectors N_={N_}')
+    print(f'Total xvectors Mean mu_={np.shape(mu_)} mu_repeat_={np.shape(mu_repeat_)}')
 
     
     '''
@@ -160,39 +160,39 @@ def GPLDA_computation(ivector_per_speaker, num_eigen_vectors=20, perform_LDA=Fal
     eps_ = sys.float_info.epsilon
     
     if whiteningType=='ZCA':
-        S_ = np.cov(ivectors_all_)
+        S_ = np.cov(xvectors_all_)
         _, sD_, sV_ = np.linalg.svd(S_)
         print(f'sD_={np.shape(sD_)}')
         print(f'sV_={np.shape(sV_)}')
-        W_ = np.repeat(np.array((np.sqrt(sD_) + eps_)**-1, ndmin=2).T, ivectors_all_.shape[0], axis=1) @ sV_.T
-        ivectors_all_ = W_ @ ivectors_all_
+        W_ = np.repeat(np.array((np.sqrt(sD_) + eps_)**-1, ndmin=2).T, xvectors_all_.shape[0], axis=1) @ sV_.T
+        xvectors_all_ = W_ @ xvectors_all_
         
     elif whiteningType=='PCA':
-        S_ = np.cov(ivectors_all_)
+        S_ = np.cov(xvectors_all_)
         sD_, sV_ = np.linalg.eig(S_)
-        sD__ = np.repeat(np.array((np.sqrt(sD_) + eps_)**-1, ndmin=2).T, ivectors_all_.shape[0], axis=1)
+        sD__ = np.repeat(np.array((np.sqrt(sD_) + eps_)**-1, ndmin=2).T, xvectors_all_.shape[0], axis=1)
         W_ = sD__ @ sV_.T
-        ivectors_all_ = W_ @ ivectors_all_
+        xvectors_all_ = W_ @ xvectors_all_
 
     else:
         W_ = np.eye(ivec_dim_)
         
-    print(f'Whitening: ivectors_all_={np.shape(ivectors_all_)} W_={np.shape(W_)}')
+    print(f'Whitening: xvectors_all_={np.shape(xvectors_all_)} W_={np.shape(W_)}')
     
-    ivectors_norm_ = np.repeat(np.array(np.linalg.norm(ivectors_all_, axis=0), ndmin=2), np.shape(ivectors_all_)[0], axis=0)+1e-10
-    print(f'ivectors_norm_={np.shape(ivectors_norm_)}')
-    ivectors_all_ = np.divide(ivectors_all_, ivectors_norm_)
-    print(f'ivectors_all_={np.shape(ivectors_all_)}')
+    xvectors_norm_ = np.repeat(np.array(np.linalg.norm(xvectors_all_, axis=0), ndmin=2), np.shape(xvectors_all_)[0], axis=0)+1e-10
+    print(f'xvectors_norm_={np.shape(xvectors_norm_)}')
+    xvectors_all_ = np.divide(xvectors_all_, xvectors_norm_)
+    print(f'xvectors_all_={np.shape(xvectors_all_)}')
 
 
-    S_ = ivectors_all_ @ ivectors_all_.T # global second-order moment
+    S_ = xvectors_all_ @ xvectors_all_.T # global second-order moment
     print(f'S_={np.shape(S_)}')
     
-    ivectors_ = {}
+    xvectors_ = {}
     for speaker_id_ in w_.keys():
         i_ = utterance_per_speaker_[speaker_id_]['start']
         j_ = utterance_per_speaker_[speaker_id_]['end']
-        ivectors_[speaker_id_] = ivectors_all_[:, i_:j_].copy()
+        xvectors_[speaker_id_] = xvectors_all_[:, i_:j_].copy()
 
     utter_lengths_ = {key:(utterance_per_speaker_[key]['end']-utterance_per_speaker_[key]['start']) for key in utterance_per_speaker_.keys()}
     uniq_lengths_ = np.sort(np.unique([val for val in utter_lengths_.values()]))
@@ -203,7 +203,7 @@ def GPLDA_computation(ivector_per_speaker, num_eigen_vectors=20, perform_LDA=Fal
 
     speaker_idx_ = 0
     f_ = np.zeros((D_,K_))
-    ivectors_sorted_ = {}
+    xvectors_sorted_ = {}
     for uniq_len_ in uniq_lengths_:
         idx_ = []
         for speaker_id_ in utter_lengths_.keys():
@@ -212,20 +212,20 @@ def GPLDA_computation(ivector_per_speaker, num_eigen_vectors=20, perform_LDA=Fal
         temp_ = {}
         count_ = 0
         for speaker_idx_within_unique_length_  in idx_:
-            rho_ = ivectors_[speaker_idx_within_unique_length_]
+            rho_ = xvectors_[speaker_idx_within_unique_length_]
             temp_[count_] = rho_
             # print(f'rho_={np.shape(rho_)}')
             # print(f'rho_ sum={np.shape(np.sum(rho_, axis=1))}')
             f_[:,speaker_idx_] = np.sum(rho_, axis=1)
             speaker_idx_ += 1
             count_ += 1
-        ivectors_sorted_[uniq_len_] = temp_.copy()
+        xvectors_sorted_[uniq_len_] = temp_.copy()
 
     print(f'f_={np.shape(f_)} determinant={np.linalg.det(f_@f_.T)}')    
-    print(f'Length wise sorting speakers {speaker_idx_} sorted={len(ivectors_sorted_)} actual={len(ivectors_)}')
+    print(f'Length wise sorting speakers {speaker_idx_} sorted={len(xvectors_sorted_)} actual={len(xvectors_)}')
     count = 0
-    for key in ivectors_sorted_.keys():
-        count += len(ivectors_sorted_[key])
+    for key in xvectors_sorted_.keys():
+        count += len(xvectors_sorted_[key])
     print(f'count={count}')
 
     
@@ -256,15 +256,15 @@ def GPLDA_computation(ivector_per_speaker, num_eigen_vectors=20, perform_LDA=Fal
                 
         idx_ = 0
         for uniq_len_ in uniq_lengths_:
-            ivector_len_ = uniq_len_
-            # print(f'ivector_len_={ivector_len_}')
+            xvector_len_ = uniq_len_
+            # print(f'xvector_len_={xvector_len_}')
             
             # Isolate i-vectors of the same given length
-            iv_ = ivectors_sorted_[uniq_len_]
+            iv_ = xvectors_sorted_[uniq_len_]
             # print(f'iv_={iv_}')
             
             # Calculate M
-            M_ = np.linalg.pinv(ivector_len_*(V_.T @ (Lambda_ @ V_)) + np.eye(num_eigen_voices_)) # Equation (A.7) in [13]
+            M_ = np.linalg.pinv(xvector_len_*(V_.T @ (Lambda_ @ V_)) + np.eye(num_eigen_voices_)) # Equation (A.7) in [13]
             # print(f'M_={np.shape(M_)} det={np.linalg.det(M_)}')
             
             # Loop over each speaker for the current i-vector length
@@ -280,7 +280,7 @@ def GPLDA_computation(ivector_per_speaker, num_eigen_vectors=20, perform_LDA=Fal
                 # print(f'Eyy_={np.shape(Eyy_)}')
                 
                 # Update Ryy 
-                R_ += ivector_len_*(M_ + Eyy_) # Equation (A.13) in [13]
+                R_ += xvector_len_*(M_ + Eyy_) # Equation (A.13) in [13]
                 # print(f'R_={np.shape(R_)}')
                 
                 # Append EyTotal
@@ -346,7 +346,7 @@ def GPLDA_computation(ivector_per_speaker, num_eigen_vectors=20, perform_LDA=Fal
 
 def compute_gplda_score(gplda_model, w1, wt):
     '''
-    Compute the G-PLDA score between enrollment ivector and test ivector
+    Compute the G-PLDA score between enrollment xvector and test xvector
 
     Parameters
     ----------
@@ -370,15 +370,16 @@ def compute_gplda_score(gplda_model, w1, wt):
     # print(f'wt={np.shape(wt)}')
     
     # Whiten the data
+    # print(f"gplda_model['WhiteningMatrix']={gplda_model['WhiteningMatrix'].shape}")
     w1 = gplda_model['WhiteningMatrix'] @ w1
     wt = gplda_model['WhiteningMatrix'] @ wt
     # print(f'w1={np.shape(w1)}')
     # print(f'wt={np.shape(wt)}')
     
     # Length-normalize the data
-    # w1 = np.divide(w1, np.repeat(np.array(np.linalg.norm(w1), ndmin=2), np.shape(w1)[0], axis=0)).T
+    w1 = np.divide(w1, np.repeat(np.array(np.linalg.norm(w1), ndmin=2), np.shape(w1)[0], axis=0)).T
     w1 = np.divide(w1, np.linalg.norm(w1))
-    # wt = np.divide(wt, np.repeat(np.array(np.linalg.norm(wt), ndmin=2), np.shape(wt)[0], axis=0)).T
+    wt = np.divide(wt, np.repeat(np.array(np.linalg.norm(wt), ndmin=2), np.shape(wt)[0], axis=0)).T
     wt = np.divide(wt, np.linalg.norm(wt))
     # print(f'w1={np.shape(w1)}')
     # print(f'wt={np.shape(wt)}')
@@ -403,6 +404,14 @@ def compute_gplda_score(gplda_model, w1, wt):
     w1wt_ = np.append(w1, wt, axis=0)
     # print(f'w1wt_={np.shape(w1wt_)}')
     score_ = -w1wt_.T @ term1_ @ w1wt_ + w1.T @ term2_ @ w1 + wt.T @ term2_ @ wt # Modified by jagabandhu 16/04 ref. paper 2 the Eq 5 and 6, in eq 5 to 6, there is a sign mismatch, has been corrected here   
-    # print(f'score_={np.shape(score_)} {score_}')
+    # term1 = w1wt_.T @ term1_ @ w1wt_
+    # print(f'term1={np.shape(term1)}')
+    # term2 = w1.T @ term2_ @ w1
+    # print(f'term2={np.shape(term2)}')
+    # term3 = wt.T @ term2_ @ wt
+    # print(f'term3={np.shape(term3)}')
+    # score_ = -term1 + term2 + term3
+
+    # print(f'score_={np.shape(score_)}')
     
     return score_

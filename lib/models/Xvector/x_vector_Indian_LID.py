@@ -1,7 +1,7 @@
 
 import torch.nn as nn
-# from lib.models.Xvector.tdnn import TDNN
-from tdnn import TDNN
+from lib.models.Xvector.tdnn import TDNN
+# from tdnn import TDNN
 import torch
 
 

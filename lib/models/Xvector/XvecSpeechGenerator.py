@@ -1,7 +1,7 @@
 
 import numpy as np
 import torch
-import utils
+import lib.models.Xvector.utils
 
 
 class XvecSpeechGenerator():
